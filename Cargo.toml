@@ -1,0 +1,10 @@
+[package]
+name = "simpar"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+members = ["simpar-macros"]
+
+[dependencies]
+simpar-macros = { path = "simpar-macros", features = ["macros"]}
