@@ -14,15 +14,15 @@ fn one_ident() {
 
 mod sep {
     use simpar::parse;
-    
+
     #[test]
     fn space() {
         parse!("hi mom" -> a, b);
-    
+
         assert_eq!("hi", a);
         assert_eq!("mom", b);
     }
-    
+
     #[test]
     fn newline() {
         parse!("hello\nworld" -> a; b);

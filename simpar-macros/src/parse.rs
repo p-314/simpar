@@ -123,10 +123,6 @@ impl ToTokens for Match {
                     Seperator::Newline => quote! {let #ITER = #RETURN_DATA.lines();},
                     Seperator::Block => quote! {
                         let #ITER = simpar::BlockIterable::blocks(#RETURN_DATA);
-                        //let #ITER = #RETURN_DATA.split("\n\n")
-                        //.flat_map(|block| block.split("\n\r\n"))
-                        //.flat_map(|block| block.split("\r\n\n"))
-                        //.flat_map(|block| block.split("\r\n\r\n"));
                     },
                     Seperator::Multispace => {
                         quote! {let #ITER = #RETURN_DATA.split(' ').filter(|s| !s.is_empty());}
@@ -162,7 +158,7 @@ impl ToTokens for MatchSeperator {
                     let __parse_macro_find_input = #INPUT;
                     let #RETURN_DATA;
                 });
-                
+
                 let find_index = match seperator {
                     Seperator::Space => quote! {
                         let j = #INPUT.find(#COMMA_SEPERATOR).expect("Expected space (' ')!");
@@ -180,7 +176,7 @@ impl ToTokens for MatchSeperator {
                     },
                 };
                 tokens.extend(find_index);
-                
+
                 quote! {
                     #mat
                 }
