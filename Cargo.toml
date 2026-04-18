@@ -1,6 +1,6 @@
 [package]
 name = "simpar"
-version = { workspace = true }
+version = "0.1.0"
 edition = { workspace = true }
 description = "A simple declarative string parser using string operations from the standard library"
 license = { workspace = true }
@@ -10,7 +10,6 @@ keywords = ["parser", "string", "macro", "proc-macro"]
 categories = ["parsing", "parser-implementations"]
 
 [workspace.package]
-version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 authors = ["Pascal Schulze"]
@@ -20,5 +19,9 @@ repository = "https://github.com/p-314/simpar"
 [workspace]
 members = ["simpar-macros"]
 
+[patch.crates-io]
+simpar-macros = { path = "simpar-macros" }
+
+
 [dependencies]
-simpar-macros = { path = "simpar-macros", features = ["macros"] }
+simpar-macros = { version = "0.1.0", path = "simpar-macros", features = ["macros"]}

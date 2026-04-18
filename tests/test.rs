@@ -56,6 +56,13 @@ mod sep {
     }
 
     #[test]
+    fn block() {
+        parse!("hello\n\nworld" -> a # b);
+        assert_eq!("hello", a);
+        assert_eq!("world", b);    
+    }
+
+    #[test]
     #[should_panic]
     fn too_many_ident() {
         parse!("hello world" -> _a, _b, _c);
@@ -127,6 +134,16 @@ mod iter {
         assert_eq!(Some("world"), a.next());
         assert_eq!(Some("!"), a.next());
         assert_eq!(None, a.next());
+    }
+
+    #[test]
+    fn iter_between() {
+        parse!("test: hello world\r\n\n!" -> _, (mut a)*,# b);
+
+        assert_eq!(Some("hello"), a.next());
+        assert_eq!(Some("world"), a.next());
+        assert_eq!(None, a.next());
+        assert_eq!("!", b);
     }
 
     #[test]
