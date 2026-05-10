@@ -6,6 +6,8 @@ The `parse!` macro allows you to extract variables from strings based on specifi
 patterns, with support for type conversion and various separators.
 
 ## Basic Usage
+The `parse!` macro takes an input and a pattern of identifiers. Seperators can be used
+to split the input. 
 
 ```
 use simpar::parse;

@@ -15,13 +15,13 @@ license = "MIT OR Apache-2.0"
 authors = ["Pascal Schulze"]
 repository = "https://github.com/p-314/simpar"
 
-
 [workspace]
 members = ["simpar-macros"]
 
 [patch.crates-io]
 simpar-macros = { path = "simpar-macros" }
 
-
 [dependencies]
-simpar-macros = { version = "0.1.0", path = "simpar-macros", features = ["macros"]}
+simpar-macros = { version = "0.1.0", path = "simpar-macros", features = [
+    "macros",
+] }

@@ -4,7 +4,8 @@ pub use simpar_macros::parse;
 
 /// Splits a string at the first newline.
 ///
-/// Returns the part before the newline and the part after (excluding the newline).
+/// Returns the part before the newline and the part after (excluding the newline)
+/// or `None` if the string does not contain a newline.
 #[inline]
 pub fn split_line(s: &str) -> Option<(&str, &str)> {
     if let Some(i) = s.find('\n') {
@@ -19,7 +20,8 @@ pub fn split_line(s: &str) -> Option<(&str, &str)> {
 
 /// Splits a string at the first empty line.
 ///
-/// Returns the part before the empty line and the remainder (excluding the empty line).
+/// Returns the part before the empty line and the remainder (excluding the empty line)
+/// or `None` if the string does not contain an empty line.
 #[inline]
 pub fn split_block(s: &str) -> Option<(&str, &str)> {
     if let Some(empty_line) = s.lines().find(|line| line.is_empty()) {
@@ -44,7 +46,8 @@ pub fn split_block(s: &str) -> Option<(&str, &str)> {
 
 /// Splits a string at the first space, trimming leading spaces from the remainder.
 ///
-/// Returns the part before the space and the part after (with leading spaces removed).
+/// Returns the part before the space and the part after (with leading spaces removed)
+/// or `None` if the string does not contain `' '`.
 #[inline]
 pub fn split_multispace(s: &str) -> Option<(&str, &str)> {
     if let Some(i) = s.find(' ') {
