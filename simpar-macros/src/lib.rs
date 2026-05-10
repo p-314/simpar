@@ -24,11 +24,11 @@ use proc_macro::TokenStream;
 ///
 /// ```
 /// use simpar::parse;
-/// 
+///
 /// parse!("Alice 30" -> name, age: u32);
 /// assert_eq!("Alice", name);
 /// assert_eq!(30, age);
-/// 
+///
 /// parse!("1 2 3" -> (mut n: i32)*,);
 /// assert_eq!(Some(1), n.next());
 /// assert_eq!(Some(2), n.next());

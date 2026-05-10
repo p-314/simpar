@@ -129,7 +129,25 @@ mod programmable {
 
         assert_eq!("hello", a);
         assert_eq!("world", b);
-        assert_eq!("hi", c);    
+        assert_eq!("hi", c);
+    }
+
+    #[test]
+    fn change_space() {
+        parse!("hello world++!" -> a,b {, = "++"} , c);
+
+        assert_eq!("hello", a);
+        assert_eq!("world", b);
+        assert_eq!("!", c);
+    }
+
+    #[test]
+    fn change_char() {
+        parse!("hello worldöhi" -> a, {, = 'ö'} b, c);
+
+        assert_eq!("hello", a);
+        assert_eq!("world", b);
+        assert_eq!("hi", c);
     }
 }
 

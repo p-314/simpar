@@ -60,7 +60,16 @@ macro_rules! parse_spat {
         let inner;
         braced!(inner in $input);
 
-        inner.parse::<Token![.]>()?;
+        let sep = if inner.peek(Token![.]) {
+            inner.parse::<Token![.]>()?;
+            Seperator::Period
+        } else if inner.peek(Token![,]) {
+            inner.parse::<Token![,]>()?;
+            Seperator::Space
+        } else {
+            panic!("Expected valid seperator (, or .)!");
+        };
+
         inner.parse::<Token![=]>()?;
 
         let split_pat = if inner.peek(LitStr) {
@@ -73,25 +82,25 @@ macro_rules! parse_spat {
             unreachable!();
         };
 
-        let pro = MatchSeperator::Chg(Seperator::Programmable(split_pat));
+        let pro = MatchSeperator::Chg(sep(split_pat));
         $format.push(pro);
     };
 }
 
 #[derive(Clone)]
 enum Seperator {
-    Space,
+    Space(SplitPattern),
     Newline,
     Block,
     Multispace,
-    Programmable(SplitPattern),
+    Period(SplitPattern),
 }
 
 macro_rules! parse_sep {
     ($format_context: ident, $input: ident, $sep: ident) => {
         let $sep;
         if $input.peek(Token![,]) {
-            $sep = Seperator::Space;
+            $sep = Format::last_sep_space(&$format_context);
             $input.parse::<Token![,]>()?;
         } else if $input.peek(Token![;]) {
             $sep = Seperator::Newline;
@@ -103,7 +112,7 @@ macro_rules! parse_sep {
             $sep = Seperator::Multispace;
             $input.parse::<Token![~]>()?;
         } else if $input.peek(Token![.]) {
-            $sep = Format::last_sep(&$format_context);
+            $sep = Format::last_sep_period(&$format_context);
             $input.parse::<Token![.]>()?;
         } else {
             return Err($input.error("Expected seperator (one of ,;#~)!"))
@@ -169,7 +178,9 @@ impl ToTokens for Match {
 
                 // get iterator
                 tokens.extend(match seperator {
-                    Seperator::Space => quote! {let #ITER = #RETURN_DATA.split(#COMMA_SEPERATOR);},
+                    Seperator::Space(split_pattern) => {
+                        quote! {let #ITER = #RETURN_DATA.split(#split_pattern);}
+                    }
                     Seperator::Newline => quote! {let #ITER = #RETURN_DATA.lines();},
                     Seperator::Block => quote! {
                         let #ITER = simpar::BlockIterable::blocks(#RETURN_DATA);
@@ -177,7 +188,7 @@ impl ToTokens for Match {
                     Seperator::Multispace => {
                         quote! {let #ITER = #RETURN_DATA.split(' ').filter(|s| !s.is_empty());}
                     }
-                    Seperator::Programmable(split_pattern) => {
+                    Seperator::Period(split_pattern) => {
                         quote! {let #ITER = #RETURN_DATA.split(#split_pattern);}
                     }
                 });
@@ -216,10 +227,10 @@ impl ToTokens for MatchSeperator {
                 });
 
                 let find_index = match seperator {
-                    Seperator::Space => quote! {
-                        let j = #INPUT.find(#COMMA_SEPERATOR).expect("Expected space (' ')!");
+                    Seperator::Space(split_pattern) => quote! {
+                        let j = #INPUT.find(#split_pattern).expect("Did not find seperator!");
                         (#RETURN_DATA, #INPUT) = #INPUT.split_at(j);
-                        #INPUT = &#INPUT[#COMMA_SEPERATOR.len()..];
+                        #INPUT = #INPUT.strip_prefix(#split_pattern).unwrap();
                     },
                     Seperator::Multispace => quote! {
                         (#RETURN_DATA, #INPUT) = simpar::split_multispace(#INPUT).expect("Expected space (' ')!");
@@ -230,7 +241,7 @@ impl ToTokens for MatchSeperator {
                     Seperator::Block => quote! {
                         (#RETURN_DATA, #INPUT) = simpar::split_block(#INPUT).expect("Expected block!");
                     },
-                    Seperator::Programmable(split_pattern) => quote! {
+                    Seperator::Period(split_pattern) => quote! {
                         let j = #INPUT.find(#split_pattern).expect("Did not find seperator!");
                         (#RETURN_DATA, #INPUT) = #INPUT.split_at(j);
                         #INPUT = #INPUT.strip_prefix(#split_pattern).unwrap();
@@ -281,12 +292,31 @@ mod format {
                 .collect()
         }
 
-        pub(crate) fn last_sep(format: &Vec<MatchSeperator>) -> Seperator {
+        pub(crate) fn last_sep_period(format: &Vec<MatchSeperator>) -> Seperator {
             format
                 .iter()
                 .rev()
                 .find_map(|el| {
-                    if let MatchSeperator::Chg(p) = el {
+                    if let MatchSeperator::Chg(p) = el
+                        && let Seperator::Period(_) = p
+                    {
+                        Some(p)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap()
+                .clone()
+        }
+
+        pub(crate) fn last_sep_space(format: &Vec<MatchSeperator>) -> Seperator {
+            format
+                .iter()
+                .rev()
+                .find_map(|el| {
+                    if let MatchSeperator::Chg(p) = el
+                        && let Seperator::Space(_) = p
+                    {
                         Some(p)
                     } else {
                         None
@@ -300,9 +330,17 @@ mod format {
 
 impl syn::parse::Parse for Format {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut format = vec![MatchSeperator::Chg(Seperator::Programmable(
-            SplitPattern::Char(LitChar::new('.', Span::call_site())),
-        ))];
+        // standard split patterns
+        let mut format = vec![
+            MatchSeperator::Chg(Seperator::Period(SplitPattern::Char(LitChar::new(
+                '.',
+                Span::call_site(),
+            )))),
+            MatchSeperator::Chg(Seperator::Space(SplitPattern::Char(LitChar::new(
+                ' ',
+                Span::call_site(),
+            )))),
+        ];
 
         while !input.is_empty() {
             let mat;
