@@ -56,7 +56,7 @@ mod sep {
     }
 
     #[test]
-    fn block() {
+    fn paragraph() {
         parse!("hello\n\nworld" -> a # b);
         assert_eq!("hello", a);
         assert_eq!("world", b);
@@ -91,7 +91,7 @@ mod sep {
 
     #[test]
     #[should_panic]
-    fn missing_block_end() {
+    fn missing_paragraph_end() {
         parse!("hello\n\nworld" -> _ # _ #);
     }
 
@@ -149,6 +149,16 @@ mod programmable {
         assert_eq!("world", b);
         assert_eq!("hi", c);
     }
+
+    #[test]
+    fn change_iter() {
+        parse!("1,2,3" -> {, = ','} (mut a: u8)*,);
+
+        assert_eq!(Some(1), a.next());
+        assert_eq!(Some(2), a.next());
+        assert_eq!(Some(3), a.next());
+        assert_eq!(None, a.next());
+    }
 }
 
 mod iter {
@@ -185,7 +195,7 @@ mod iter {
     }
 
     #[test]
-    fn iter_blocks() {
+    fn iter_paragraphs() {
         parse!("hello\n\nworld\r\n\n!" -> (mut a)*#);
 
         assert_eq!(Some("hello"), a.next());
@@ -267,10 +277,10 @@ mod parse {
 
 #[test]
 fn split_fn() {
-    use simpar::{split_block, split_line};
+    use simpar::{split_line, split_paragraph};
 
     let s = "hi\r\n\r\n";
-    let (a, b) = split_block(s).unwrap();
+    let (a, b) = split_paragraph(s).unwrap();
     assert_eq!(a, "hi");
     assert_eq!(b, "");
 

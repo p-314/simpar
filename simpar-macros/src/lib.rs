@@ -1,5 +1,11 @@
 #![cfg(feature = "macros")]
-//! Procedural macro for declarative string parsing.
+//! Simpar procedural macros.
+//!
+//! # Warning! ⚠️
+//!
+//! The macros depend on library functions in `simpar` and might
+//! not work if imported directly. Use the re-exports in the `simpar` crate
+//! instead.
 
 mod parse;
 
@@ -13,12 +19,24 @@ use proc_macro::TokenStream;
 /// ```ignore
 /// parse!(input -> pattern)
 /// ```
+/// A pattern is made of a match (usually an identifier) followed by a separator. 
 ///
-/// Pattern syntax:
-/// - `var` or `var:Type` - capture variable
+/// Match syntax:
+/// - `<var>` - capture as string slice and assigns it to `<var>`
+/// - `<var>: <type>` - capture and convert to type
 /// - `_` - blank (skip)
-/// - `(pattern)*sep` - repetition with separator
-/// - Separators: `,` (space), `;` (line), `#` (block), `~` (multispace)
+/// - `(<pattern>)*<sep>` - repetition where `<sep>` can be any valid separator
+/// - `[<pattern>]*<sep>` - repetition collected into a `Vec`
+///
+/// Separators:
+///
+/// |Separator|Symbol|splits at|programmable?|
+/// |:---|:--:|----|:--:|
+/// | Space | `,` | whitespace (`' '`) | **yes** |
+/// | Newline | `;` | newline (`\n` or `\r\n`) | no |
+/// | Paragraph | `#` | empty lines | no |
+/// | Multispace | `~` | one or more whitespaces (`' '`) | no |
+/// | Period | `.` | period (`.`) | **yes** |
 ///
 /// ## Examples
 ///

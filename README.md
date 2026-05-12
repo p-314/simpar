@@ -5,21 +5,46 @@ A simple declarative string parser using string operations from the standard lib
 The `parse!` macro allows you to extract variables from strings based on specified
 patterns, with support for type conversion and various separators.
 
-## Basic Usage
-The `parse!` macro takes an input and a pattern of identifiers. Seperators can be used
-to split the input. 
+For example, if `s` is a string of the form `"<name> <age> birthday: <day>.<month>.<year>"`
+then name, age and the birthday can be retrieved with
 
 ```
 use simpar::parse;
 
-parse!("hello world" -> x, y);
-assert_eq!(x, "hello");
-assert_eq!(y, "world");
+let s = "Alice 42 birthday: 1.1.1970";
+
+parse!(s -> name, age: u8, _, day.month.year);
+
+assert_eq!(name, "Alice");
+assert_eq!(age, 42);
+assert_eq!((day, month, year), ("1", "1", "1970"));
 ```
 
-## Type Annotations
 
-Specify types to automatically convert extracted values using the `FromStr` trait:
+## Pattern Syntax Reference
+A pattern is made of a match (usually an identifier) followed by a separator. Valid 
+matches are:
+
+- `<var>` - capture as string slice and assign it to `<var>`
+- `<var>: <type>` - capture and convert to type
+- `_` - blank (skip)
+- `(<pattern>)*<sep>` - repetition where `<sep>` can be any valid separator
+- `[<pattern>]*<sep>` - repetition collected into a `Vec`
+
+
+Supported separators are:
+
+|Separator|Symbol|splits at|programmable?|
+|:---|:--:|----|:--:|
+| Space | `,` | whitespace (`' '`) | **yes** |
+| Newline | `;` | newline (`\n` or `\r\n`) | no |
+| Paragraph | `#` | empty lines | no |
+| Multispace | `~` | one or more whitespaces (`' '`) | no |
+| Period | `.` | period (`.`) | **yes** |
+
+
+## Type Annotations
+By using `<var>: <type>` values are automatically converted using the `FromStr` trait:
 
 ```
 use simpar::parse;
@@ -29,72 +54,60 @@ assert_eq!(count, 42);
 assert_eq!(ratio, 3.14);
 ```
 
-## Separators
-
-Control how patterns are delimited using different separators:
-
-```
-use simpar::parse;
-
-// Space separator (`,`)
-parse!("hello world" -> a, b);
-assert_eq!(a, "hello");
-assert_eq!(b, "world");
-
-// Newline separator (`;`)
-parse!("first\nsecond" -> line1; line2);
-assert_eq!(line1, "first");
-assert_eq!(line2, "second");
-
-// Block separator (`#`)
-parse!("block1\n\nblock2" -> block1 # block2);
-assert_eq!(block1, "block1");
-assert_eq!(block2, "block2");
-
-// Multispace separator (`~`)
-parse!("data    value" -> x~ y);
-assert_eq!(x, "data");
-assert_eq!(y, "value");
-```
+The program will panic, if any of the conversions fail.
 
 ## Repetitions
 
-Extract repeating patterns using `(pattern)*separator`:
+Repeating patterns can be extracted using `(<pattern>)*<separator>`:
 
 ```
 use simpar::parse;
 
-// Collect space-separated values
-parse!("1 2 3 4" -> (n: i32)*,);
-let collected: Vec<i32> = n.collect();
-assert_eq!(collected, vec![1, 2, 3, 4]);
+parse!("1 2 3 4" -> (mut n: i32)*,);
+
+assert_eq!(n.next(), Some(1));
+assert_eq!(n.next(), Some(2));
+assert_eq!(n.next(), Some(3));
+assert_eq!(n.next(), Some(4));
+assert_eq!(n.next(), None);
 ```
 
-## Complex Patterns
+Repetitions return iterators, but can be directly collected into vectors using
+the `[<pattern>]*<separator>` syntax.
 
-Combine features for flexible parsing:
 
 ```
 use simpar::parse;
 
-// Skip fields with `_`, mix separators
-parse!("Alice _ 30" -> name, _, age: u32);
-assert_eq!(age, 30);
+parse!("1 2 3 4" -> [n: i32]*,);
 
-// Block separator for multi-line blocks
-let text = "Hello\n\nWorld!";
-
-parse!(text -> (mut block)*#);
-assert_eq!(block.next(), Some("Hello"));
-assert_eq!(block.next(), Some("World!"));
+assert_eq!(n, vec![1, 2, 3, 4]);
 ```
 
-## Pattern Syntax Reference
+At the moment repetitions can contain at most one identifier.
 
-- `var` - capture as string
-- `var: Type` - capture and convert to type
-- `_` - blank (skip)
-- `(pattern)*,` - repetition with space separator
-- `(pattern)*;` - repetition with newline separator
-- `(pattern)*#` - repetition with block separator
-- `(pattern)*~` - repetition with multispace separator
+## Programmable separators
+Some separators can be modified. `{<separator> = <pattern>}` sets the sperator to `<pattern>`
+where `<pattern>` can be anything that implements the standard library `Pattern` trait, 
+e.g. a string or char.
+
+For example if `file` is the content of a CSV file like
+
+```csv
+country,capital
+germany,Berlin
+```
+
+then parsing can be done with:
+
+```
+# use simpar::parse;
+# let file = r"country,capital
+# germany,Berlin";
+
+parse!(file -> _; {, = ','} country, capital);
+```
+
+# License
+Simpar is distributed under the terms of both the MIT license and the
+Apache License (Version 2.0).

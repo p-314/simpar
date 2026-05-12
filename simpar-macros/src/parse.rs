@@ -20,20 +20,24 @@ impl ToTokens for IdentHelper {
 }
 
 const INPUT: IdentHelper = new_ident!("input");
-const COMMA_SEPERATOR: IdentHelper = new_ident!("comma_seperator");
+const COMMA_SEPERATOR: IdentHelper = new_ident!("comma_separator");
 const RETURN_DATA: IdentHelper = new_ident!("return_data");
 const ITER: IdentHelper = new_ident!("iter");
 
 #[derive(Clone)]
 struct Variable {
-    mu: Option<Token![mut]>,
-    id: Ident,
-    ty: Option<Type>,
+    mutability: Option<Token![mut]>,
+    ident: Ident,
+    conversion_type: Option<Type>,
 }
 
 impl ToTokens for Variable {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let Self { mu, id, ty: _ } = self.clone();
+        let Self {
+            mutability: mu,
+            ident: id,
+            conversion_type: _,
+        } = self.clone();
         tokens.extend(quote! {let #mu #id;});
     }
 }
@@ -62,12 +66,12 @@ macro_rules! parse_spat {
 
         let sep = if inner.peek(Token![.]) {
             inner.parse::<Token![.]>()?;
-            Seperator::Period
+            Separator::Period
         } else if inner.peek(Token![,]) {
             inner.parse::<Token![,]>()?;
-            Seperator::Space
+            Separator::Space
         } else {
-            panic!("Expected valid seperator (, or .)!");
+            panic!("Expected valid separator (, or .)!");
         };
 
         inner.parse::<Token![=]>()?;
@@ -82,16 +86,16 @@ macro_rules! parse_spat {
             unreachable!();
         };
 
-        let pro = MatchSeperator::Chg(sep(split_pat));
+        let pro = MatchSeparator::Chg(sep(split_pat));
         $format.push(pro);
     };
 }
 
 #[derive(Clone)]
-enum Seperator {
+enum Separator {
     Space(SplitPattern),
     Newline,
-    Block,
+    Paragraph,
     Multispace,
     Period(SplitPattern),
 }
@@ -103,19 +107,19 @@ macro_rules! parse_sep {
             $sep = Format::last_sep_space(&$format_context);
             $input.parse::<Token![,]>()?;
         } else if $input.peek(Token![;]) {
-            $sep = Seperator::Newline;
+            $sep = Separator::Newline;
             $input.parse::<Token![;]>()?;
         } else if $input.peek(Token![#]) {
-            $sep = Seperator::Block;
+            $sep = Separator::Paragraph;
             $input.parse::<Token![#]>()?;
         } else if $input.peek(Token![~]) {
-            $sep = Seperator::Multispace;
+            $sep = Separator::Multispace;
             $input.parse::<Token![~]>()?;
         } else if $input.peek(Token![.]) {
             $sep = Format::last_sep_period(&$format_context);
             $input.parse::<Token![.]>()?;
         } else {
-            return Err($input.error("Expected seperator (one of ,;#~)!"))
+            return Err($input.error("Expected separator (one of ,;#~)!"))
         }
     };
 }
@@ -124,21 +128,21 @@ macro_rules! parse_sep {
 enum Match {
     Blank,
     Var(Box<Variable>),
-    // repetition (inner, seperator, collect)
-    Rep(Vec<MatchSeperator>, Seperator, bool),
+    // repetition (inner, separator, collect)
+    Rep(Vec<MatchSeparator>, Separator, bool),
 }
 
 mod mat {
     use crate::parse::Match;
-    use crate::parse::{MatchSeperator, Variable};
+    use crate::parse::{MatchSeparator, Variable};
 
     /// Return the `Var`s in `v`.
-    fn vars(v: &Vec<MatchSeperator>) -> Vec<Variable> {
+    fn vars(v: &Vec<MatchSeparator>) -> Vec<Variable> {
         let mut var = Vec::new();
         for ms in v {
             var.extend(match ms {
-                MatchSeperator::Open(m) | MatchSeperator::Closed(m, _) => m.vars(),
-                MatchSeperator::Chg(_) => vec![],
+                MatchSeparator::Open(m) | MatchSeparator::Closed(m, _) => m.vars(),
+                MatchSeparator::Chg(_) => vec![],
             })
         }
         var
@@ -150,7 +154,7 @@ mod mat {
             match self {
                 Match::Blank => vec![],
                 Match::Var(var) => vec![*var.clone()],
-                Match::Rep(match_seperators, _, _) => vars(match_seperators),
+                Match::Rep(match_separators, _, _) => vars(match_separators),
             }
         }
     }
@@ -161,8 +165,8 @@ impl ToTokens for Match {
         match self {
             Match::Blank => {}
             Match::Var(variable) => {
-                let var = variable.id.clone();
-                tokens.extend(match &variable.ty {
+                let var = variable.ident.clone();
+                tokens.extend(match &variable.conversion_type {
                     Some(ty) => quote! {
                         #var = #RETURN_DATA.parse::<#ty>().expect("Parsing failed!");
                     },
@@ -171,24 +175,24 @@ impl ToTokens for Match {
                     },
                 });
             }
-            Match::Rep(match_seperators, seperator, collect) => {
-                let var = self.vars().first().cloned().map(|v| v.id);
+            Match::Rep(match_separators, separator, collect) => {
+                let var = self.vars().first().cloned().map(|v| v.ident);
                 let decl = var.as_ref().map(|id| quote! {let #id;});
                 let assign = var.as_ref().map_or(quote! {let _}, |id| quote! {#id});
 
                 // get iterator
-                tokens.extend(match seperator {
-                    Seperator::Space(split_pattern) => {
+                tokens.extend(match separator {
+                    Separator::Space(split_pattern) => {
                         quote! {let #ITER = #RETURN_DATA.split(#split_pattern);}
                     }
-                    Seperator::Newline => quote! {let #ITER = #RETURN_DATA.lines();},
-                    Seperator::Block => quote! {
-                        let #ITER = simpar::BlockIterable::blocks(#RETURN_DATA);
+                    Separator::Newline => quote! {let #ITER = #RETURN_DATA.lines();},
+                    Separator::Paragraph => quote! {
+                        let #ITER = simpar::ParagraphIterable::paragraphs(#RETURN_DATA);
                     },
-                    Seperator::Multispace => {
+                    Separator::Multispace => {
                         quote! {let #ITER = #RETURN_DATA.split(' ').filter(|s| !s.is_empty());}
                     }
-                    Seperator::Period(split_pattern) => {
+                    Separator::Period(split_pattern) => {
                         quote! {let #ITER = #RETURN_DATA.split(#split_pattern);}
                     }
                 });
@@ -197,7 +201,7 @@ impl ToTokens for Match {
                 tokens.extend(quote! {
                     #assign = #ITER.map(|#INPUT| {
                         #decl
-                        #(#match_seperators)*
+                        #(#match_separators)*
                         #var
                     })#col;
                 });
@@ -206,43 +210,43 @@ impl ToTokens for Match {
     }
 }
 
-enum MatchSeperator {
+enum MatchSeparator {
     Open(Match),
-    Closed(Match, Seperator),
-    // seperator change
-    Chg(Seperator),
+    Closed(Match, Separator),
+    // separator change
+    Chg(Separator),
 }
 
-impl ToTokens for MatchSeperator {
+impl ToTokens for MatchSeparator {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let ext = match self {
-            MatchSeperator::Open(mat) => quote! {
+            MatchSeparator::Open(mat) => quote! {
                 let #RETURN_DATA = #INPUT;
                 #mat
             },
-            MatchSeperator::Closed(mat, seperator) => {
+            MatchSeparator::Closed(mat, separator) => {
                 tokens.extend(quote! {
                     let __parse_macro_find_input = #INPUT;
                     let #RETURN_DATA;
                 });
 
-                let find_index = match seperator {
-                    Seperator::Space(split_pattern) => quote! {
-                        let j = #INPUT.find(#split_pattern).expect("Did not find seperator!");
+                let find_index = match separator {
+                    Separator::Space(split_pattern) => quote! {
+                        let j = #INPUT.find(#split_pattern).expect("Did not find separator!");
                         (#RETURN_DATA, #INPUT) = #INPUT.split_at(j);
                         #INPUT = #INPUT.strip_prefix(#split_pattern).unwrap();
                     },
-                    Seperator::Multispace => quote! {
+                    Separator::Multispace => quote! {
                         (#RETURN_DATA, #INPUT) = simpar::split_multispace(#INPUT).expect("Expected space (' ')!");
                     },
-                    Seperator::Newline => quote! {
+                    Separator::Newline => quote! {
                         (#RETURN_DATA, #INPUT) = simpar::split_line(#INPUT).expect("Expected newline!");
                     },
-                    Seperator::Block => quote! {
-                        (#RETURN_DATA, #INPUT) = simpar::split_block(#INPUT).expect("Expected block!");
+                    Separator::Paragraph => quote! {
+                        (#RETURN_DATA, #INPUT) = simpar::split_paragraph(#INPUT).expect("Expected paragraph!");
                     },
-                    Seperator::Period(split_pattern) => quote! {
-                        let j = #INPUT.find(#split_pattern).expect("Did not find seperator!");
+                    Separator::Period(split_pattern) => quote! {
+                        let j = #INPUT.find(#split_pattern).expect("Did not find separator!");
                         (#RETURN_DATA, #INPUT) = #INPUT.split_at(j);
                         #INPUT = #INPUT.strip_prefix(#split_pattern).unwrap();
                     },
@@ -253,21 +257,21 @@ impl ToTokens for MatchSeperator {
                     #mat
                 }
             }
-            MatchSeperator::Chg(_) => quote! {},
+            MatchSeparator::Chg(_) => quote! {},
         };
         tokens.extend(ext);
     }
 }
 
-struct Format(Vec<MatchSeperator>);
+struct Format(Vec<MatchSeparator>);
 
 mod format {
     use crate::parse::*;
 
-    fn check_open(v: &[MatchSeperator]) -> bool {
+    fn check_open(v: &[MatchSeparator]) -> bool {
         v[..(v.len() - 1)]
             .iter()
-            .all(|ms| matches!(ms, MatchSeperator::Closed(_, _) | MatchSeperator::Chg(_)))
+            .all(|ms| matches!(ms, MatchSeparator::Closed(_, _) | MatchSeparator::Chg(_)))
     }
 
     impl Format {
@@ -277,8 +281,8 @@ mod format {
 
         pub(crate) fn check_rep(&self) -> bool {
             self.0.iter().all(|ms| match ms {
-                MatchSeperator::Open(m) | MatchSeperator::Closed(m, _) => m.vars().len() <= 1,
-                MatchSeperator::Chg(_) => true,
+                MatchSeparator::Open(m) | MatchSeparator::Closed(m, _) => m.vars().len() <= 1,
+                MatchSeparator::Chg(_) => true,
             })
         }
 
@@ -286,19 +290,19 @@ mod format {
             self.0
                 .iter()
                 .flat_map(|ms| match ms {
-                    MatchSeperator::Open(m) | MatchSeperator::Closed(m, _) => m.vars(),
-                    MatchSeperator::Chg(_) => vec![],
+                    MatchSeparator::Open(m) | MatchSeparator::Closed(m, _) => m.vars(),
+                    MatchSeparator::Chg(_) => vec![],
                 })
                 .collect()
         }
 
-        pub(crate) fn last_sep_period(format: &Vec<MatchSeperator>) -> Seperator {
+        pub(crate) fn last_sep_period(format: &[MatchSeparator]) -> Separator {
             format
                 .iter()
                 .rev()
                 .find_map(|el| {
-                    if let MatchSeperator::Chg(p) = el
-                        && let Seperator::Period(_) = p
+                    if let MatchSeparator::Chg(p) = el
+                        && let Separator::Period(_) = p
                     {
                         Some(p)
                     } else {
@@ -309,13 +313,13 @@ mod format {
                 .clone()
         }
 
-        pub(crate) fn last_sep_space(format: &Vec<MatchSeperator>) -> Seperator {
+        pub(crate) fn last_sep_space(format: &[MatchSeparator]) -> Separator {
             format
                 .iter()
                 .rev()
                 .find_map(|el| {
-                    if let MatchSeperator::Chg(p) = el
-                        && let Seperator::Space(_) = p
+                    if let MatchSeparator::Chg(p) = el
+                        && let Separator::Space(_) = p
                     {
                         Some(p)
                     } else {
@@ -332,11 +336,11 @@ impl syn::parse::Parse for Format {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         // standard split patterns
         let mut format = vec![
-            MatchSeperator::Chg(Seperator::Period(SplitPattern::Char(LitChar::new(
+            MatchSeparator::Chg(Separator::Period(SplitPattern::Char(LitChar::new(
                 '.',
                 Span::call_site(),
             )))),
-            MatchSeperator::Chg(Seperator::Space(SplitPattern::Char(LitChar::new(
+            MatchSeparator::Chg(Separator::Space(SplitPattern::Char(LitChar::new(
                 ' ',
                 Span::call_site(),
             )))),
@@ -360,7 +364,11 @@ impl syn::parse::Parse for Format {
                     })
                     .map_or(Ok(None), |y| y.map(Some))?;
 
-                let var = Variable { mu, id, ty };
+                let var = Variable {
+                    mutability: mu,
+                    ident: id,
+                    conversion_type: ty,
+                };
 
                 // make Match
                 mat = Match::Var(Box::new(var));
@@ -370,7 +378,7 @@ impl syn::parse::Parse for Format {
 
                 let Format(inner_format) = inner.parse::<Format>()?;
 
-                // get rep seperator
+                // get rep separator
                 input.parse::<Token![*]>()?;
                 parse_sep!(format, input, sep);
 
@@ -381,7 +389,7 @@ impl syn::parse::Parse for Format {
 
                 let Format(inner_format) = inner.parse::<Format>()?;
 
-                // get rep seperator
+                // get rep separator
                 input.parse::<Token![*]>()?;
                 parse_sep!(format, input, sep);
 
@@ -394,20 +402,20 @@ impl syn::parse::Parse for Format {
             }
 
             if input.is_empty() {
-                format.push(MatchSeperator::Open(mat));
+                format.push(MatchSeparator::Open(mat));
                 break;
             }
 
-            // parse split pattern between match and seperator
+            // parse split pattern between match and separator
             if input.peek(Brace) {
                 parse_spat!(input, format);
             }
 
-            // get Seperator
+            // get Separator
             parse_sep!(format, input, sep);
 
-            // make MatchSeperator and push
-            format.push(MatchSeperator::Closed(mat, sep));
+            // make MatchSeparator and push
+            format.push(MatchSeparator::Closed(mat, sep));
         }
 
         Ok(Self(format))
