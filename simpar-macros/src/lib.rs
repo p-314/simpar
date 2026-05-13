@@ -16,21 +16,23 @@ use proc_macro::TokenStream;
 ///
 /// The `parse!` macro takes input (string or identifier) and a pattern:
 ///
-/// ```ignore
+/// ```
+/// # use simpar_macros::parse;
+/// # let input = "";
 /// parse!(input -> pattern)
 /// ```
-/// A pattern is made of a match (usually an identifier) followed by a separator. 
+/// A pattern consists of matches (usually identifiers) followed by separators. 
 ///
 /// Match syntax:
-/// - `<var>` - capture as string slice and assigns it to `<var>`
+/// - `<var>` - capture as string slice and assign it to `<var>`
 /// - `<var>: <type>` - capture and convert to type
 /// - `_` - blank (skip)
 /// - `(<pattern>)*<sep>` - repetition where `<sep>` can be any valid separator
 /// - `[<pattern>]*<sep>` - repetition collected into a `Vec`
 ///
-/// Separators:
+/// Separator Syntax:
 ///
-/// |Separator|Symbol|splits at|programmable?|
+/// |separator|symbol|splits at|programmable?|
 /// |:---|:--:|----|:--:|
 /// | Space | `,` | whitespace (`' '`) | **yes** |
 /// | Newline | `;` | newline (`\n` or `\r\n`) | no |

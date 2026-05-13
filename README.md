@@ -6,7 +6,7 @@ The `parse!` macro allows you to extract variables from strings based on specifi
 patterns, with support for type conversion and various separators.
 
 For example, if `s` is a string of the form `"<name> <age> birthday: <day>.<month>.<year>"`
-then name, age and the birthday can be retrieved with
+then name, age and the birthday can be retrieved with:
 
 ```
 use simpar::parse;
@@ -22,7 +22,7 @@ assert_eq!((day, month, year), ("1", "1", "1970"));
 
 
 ## Pattern Syntax Reference
-A pattern is made of a match (usually an identifier) followed by a separator. Valid 
+A pattern consists of matches (usually identifiers) followed by separators. Valid 
 matches are:
 
 - `<var>` - capture as string slice and assign it to `<var>`
@@ -34,7 +34,7 @@ matches are:
 
 Supported separators are:
 
-|Separator|Symbol|splits at|programmable?|
+|separator|symbol|splits at|programmable?|
 |:---|:--:|----|:--:|
 | Space | `,` | whitespace (`' '`) | **yes** |
 | Newline | `;` | newline (`\n` or `\r\n`) | no |
@@ -87,11 +87,11 @@ assert_eq!(n, vec![1, 2, 3, 4]);
 At the moment repetitions can contain at most one identifier.
 
 ## Programmable separators
-Some separators can be modified. `{<separator> = <pattern>}` sets the sperator to `<pattern>`
+Some separators can be modified. `{<separator> = <pattern>}` sets the separator to `<pattern>`
 where `<pattern>` can be anything that implements the standard library `Pattern` trait, 
 e.g. a string or char.
 
-For example if `file` is the content of a CSV file like
+For example, if `file` is the content of a CSV file like
 
 ```csv
 country,capital
