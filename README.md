@@ -8,7 +8,7 @@ patterns, with support for type conversion and various separators.
 For example, if `s` is a string of the form `"<name> <age> birthday: <day>.<month>.<year>"`
 then name, age and the birthday can be retrieved with:
 
-```
+```rust
 use simpar::parse;
 
 let s = "Alice 42 birthday: 1.1.1970";
@@ -46,7 +46,7 @@ Supported separators are:
 ## Type Annotations
 By using `<var>: <type>` values are automatically converted using the `FromStr` trait:
 
-```
+```rust
 use simpar::parse;
 
 parse!("42 3.14" -> count: u32, ratio: f64);
@@ -60,7 +60,7 @@ The program will panic, if any of the conversions fail.
 
 Repeating patterns can be extracted using `(<pattern>)*<separator>`:
 
-```
+```rust
 use simpar::parse;
 
 parse!("1 2 3 4" -> (mut n: i32)*,);
@@ -76,7 +76,7 @@ Repetitions return iterators, but can be directly collected into vectors using
 the `[<pattern>]*<separator>` syntax.
 
 
-```
+```rust
 use simpar::parse;
 
 parse!("1 2 3 4" -> [n: i32]*,);
@@ -100,11 +100,7 @@ germany,Berlin
 
 then parsing can be done with:
 
-```
-# use simpar::parse;
-# let file = r"country,capital
-# germany,Berlin";
-
+```rust
 parse!(file -> _; {, = ','} country, capital);
 ```
 
