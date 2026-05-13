@@ -35,10 +35,10 @@ use proc_macro::TokenStream;
 /// |separator|symbol|splits at|programmable?|
 /// |:---|:--:|----|:--:|
 /// | Space | `,` | whitespace (`' '`) | **yes** |
-/// | Newline | `;` | newline (`\n` or `\r\n`) | no |
+/// | Newline | `;` | newline (`'\n'` or `"\r\n"`) | no |
 /// | Paragraph | `#` | empty lines | no |
 /// | Multispace | `~` | one or more whitespaces (`' '`) | no |
-/// | Period | `.` | period (`.`) | **yes** |
+/// | Period | `.` | period (`'.'`) | **yes** |
 ///
 /// ## Examples
 ///
