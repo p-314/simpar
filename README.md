@@ -1,5 +1,10 @@
 # simpar
 
+![crates.io](https://img.shields.io/crates/v/simpar)
+![docs.rs](https://img.shields.io/docsrs/simpar)
+![Crates.io License](https://img.shields.io/crates/l/simpar)
+
+
 A simple declarative string parser using string operations from the standard library.
 
 The `parse!` macro allows you to extract variables from strings based on specified
@@ -107,3 +112,5 @@ parse!(file -> _; {, = ','} country, capital);
 # License
 Simpar is distributed under the terms of both the MIT license and the
 Apache License (Version 2.0).
+
+See [LICENSE-MIT](LICENSE-MIT) or [LICENSE-APACHE](LICENSE-APACHE) for more details.
