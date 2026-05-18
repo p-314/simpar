@@ -1,13 +1,13 @@
 # simpar
 
-![crates.io](https://img.shields.io/crates/v/simpar)
-![docs.rs](https://img.shields.io/docsrs/simpar)
+[![crates.io](https://img.shields.io/crates/v/simpar)](https://crates.io/crates/simpar)
+[![docs.rs](https://img.shields.io/docsrs/simpar)](https://docs.rs/simpar/latest/simpar/)
 ![Crates.io License](https://img.shields.io/crates/l/simpar)
 
 
 A simple declarative string parser using string operations from the standard library.
 
-The `parse!` macro allows you to extract variables from strings based on specified
+The [`parse!`](https://docs.rs/simpar/latest/simpar/macro.parse.html) macro allows you to extract variables from strings based on specified
 patterns, with support for type conversion and various separators.
 
 For example, if `s` is a string of the form `"<name> <age> birthday: <day>.<month>.<year>"`
