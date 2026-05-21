@@ -20,7 +20,6 @@ impl ToTokens for IdentHelper {
 }
 
 const INPUT: IdentHelper = new_ident!("input");
-const COMMA_SEPERATOR: IdentHelper = new_ident!("comma_separator");
 const RETURN_DATA: IdentHelper = new_ident!("return_data");
 const ITER: IdentHelper = new_ident!("iter");
 
@@ -71,7 +70,7 @@ macro_rules! parse_spat {
             inner.parse::<Token![,]>()?;
             Separator::Space
         } else {
-            panic!("Expected valid separator (, or .)!");
+            panic!("Expected programmable separator (, or .)!");
         };
 
         inner.parse::<Token![=]>()?;
@@ -98,6 +97,8 @@ enum Separator {
     Paragraph,
     Multispace,
     Period(SplitPattern),
+    LiteralStr(LitStr),
+    LiteralChar(LitChar),
 }
 
 macro_rules! parse_sep {
@@ -118,8 +119,12 @@ macro_rules! parse_sep {
         } else if $input.peek(Token![.]) {
             $sep = Format::last_sep_period(&$format_context);
             $input.parse::<Token![.]>()?;
+        } else if $input.peek(LitStr) {
+            $sep = Separator::LiteralStr($input.parse::<LitStr>()?);
+        } else if $input.peek(LitChar) {
+            $sep = Separator::LiteralChar($input.parse::<LitChar>()?);
         } else {
-            return Err($input.error("Expected separator (one of ,;#~)!"))
+            return Err($input.error("Expected separator (one of ,;#~. or string/char literal)!"))
         }
     };
 }
@@ -195,6 +200,11 @@ impl ToTokens for Match {
                     Separator::Period(split_pattern) => {
                         quote! {let #ITER = #RETURN_DATA.split(#split_pattern);}
                     }
+                    Separator::LiteralStr(lit_str) => {
+                        quote! {let #ITER = #RETURN_DATA.split(#lit_str);}
+                    }
+                    Separator::LiteralChar(lit_char) => 
+                        quote! {let #ITER = #RETURN_DATA.split(#lit_char);},
                 });
 
                 let col = collect.then_some(quote! {.collect::<Vec<_>>()});
@@ -249,6 +259,16 @@ impl ToTokens for MatchSeparator {
                         let j = #INPUT.find(#split_pattern).expect("Did not find separator!");
                         (#RETURN_DATA, #INPUT) = #INPUT.split_at(j);
                         #INPUT = #INPUT.strip_prefix(#split_pattern).unwrap();
+                    },
+                    Separator::LiteralStr(lit_str) => quote! {
+                        let j = #INPUT.find(#lit_str).expect("Did not find separator!");
+                        (#RETURN_DATA, #INPUT) = #INPUT.split_at(j);
+                        #INPUT = #INPUT.strip_prefix(#lit_str).unwrap();
+                    },
+                    Separator::LiteralChar(lit_char) => quote! {
+                        let j = #INPUT.find(#lit_char).expect("Did not find separator!");
+                        (#RETURN_DATA, #INPUT) = #INPUT.split_at(j);
+                        #INPUT = #INPUT.strip_prefix(#lit_char).unwrap();
                     },
                 };
                 tokens.extend(find_index);
@@ -398,7 +418,9 @@ impl syn::parse::Parse for Format {
                 parse_spat!(input, format);
                 continue;
             } else {
-                return Err(input.error("Unexpected token"));
+                // allow for consecutive separators by treating this as a `Blank`
+                mat = Match::Blank;
+                // this will panic later in `parse_sep!` if there is an unexpected token
             }
 
             if input.is_empty() {
@@ -508,9 +530,6 @@ pub fn parse_impl(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
         #(
             #outputs
         )*
-
-        // FIX: make this work scoped
-        let mut #COMMA_SEPERATOR = " ";
 
         {
             // local variables

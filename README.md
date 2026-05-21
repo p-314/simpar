@@ -46,6 +46,7 @@ Supported separators are:
 | Paragraph | `#` | empty lines | no |
 | Multispace | `~` | one or more whitespaces (`' '`) | no |
 | Period | `.` | period (`'.'`) | **yes** |
+| Literal | `".."` or `'..'` | next occurrence of the literal | no |
 
 
 ## Type Annotations
@@ -99,14 +100,14 @@ e.g. a string or char.
 For example, if `file` is the content of a CSV file like
 
 ```csv
-country,capital
-germany,Berlin
+country,capital,population,top-level domain
+germany,Berlin,83497147,.de
 ```
 
 then parsing can be done with:
 
 ```rust
-parse!(file -> _; {, = ','} country, capital);
+parse!(file -> _; {, = ','} country, capital, population: u64, tld);
 ```
 
 # License

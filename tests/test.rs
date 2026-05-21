@@ -51,6 +51,7 @@ mod sep {
     #[test]
     fn multispace() {
         parse!("hello      world" -> a~ b);
+
         assert_eq!("hello", a);
         assert_eq!("world", b);
     }
@@ -58,17 +59,36 @@ mod sep {
     #[test]
     fn paragraph() {
         parse!("hello\n\nworld" -> a # b);
+
         assert_eq!("hello", a);
         assert_eq!("world", b);
     }
 
     #[test]
-    fn programmable() {
+    fn period() {
         parse!("07.05.2026" -> day.month.year);
 
         assert_eq!("07", day);
         assert_eq!("05", month);
         assert_eq!("2026", year);
+    }
+
+    #[test]
+    fn literal_str() {
+        parse!("hello123world456!" -> a "123" b "456" c);
+
+        assert_eq!("hello", a);
+        assert_eq!("world", b);
+        assert_eq!("!", c);
+    }
+
+    #[test]
+    fn literal_char() {
+        parse!("helloöworldö!" -> a 'ö' b 'ö' c);
+
+        assert_eq!("hello", a);
+        assert_eq!("world", b);
+        assert_eq!("!", c);
     }
 
     #[test]
@@ -99,6 +119,20 @@ mod sep {
     #[should_panic]
     fn missing_multispace_end() {
         parse!("hello   world" -> _~ _~);
+    }
+    
+    #[test]
+    #[should_panic]
+    fn missing_literal() {
+        parse!("hello world" -> _ "test" _);
+    }
+
+    #[test]
+    fn implicit_blank() {
+        parse!("hello world !" -> a,,b);
+
+        assert_eq!(a, "hello");
+        assert_eq!(b, "!");
     }
 }
 
@@ -202,6 +236,38 @@ mod iter {
         assert_eq!(Some("world"), a.next());
         assert_eq!(Some("!"), a.next());
         assert_eq!(None, a.next());
+    }
+
+
+    #[test]
+    fn iter_period() {
+        parse!("hello.world.!" -> (mut a)*.);
+
+        assert_eq!(Some("hello"), a.next());
+        assert_eq!(Some("world"), a.next());
+        assert_eq!(Some("!"), a.next());
+        assert_eq!(None, a.next());    
+    }
+
+    #[test]
+    fn iter_literal_str() {
+        parse!("hello123world123!" -> (mut a)*"123");
+
+        assert_eq!(Some("hello"), a.next());
+        assert_eq!(Some("world"), a.next());
+        assert_eq!(Some("!"), a.next());
+        assert_eq!(None, a.next());    
+    }
+
+
+    #[test]
+    fn iter_literal_char() {
+        parse!("hello1world1!" -> (mut a)*'1');
+
+        assert_eq!(Some("hello"), a.next());
+        assert_eq!(Some("world"), a.next());
+        assert_eq!(Some("!"), a.next());
+        assert_eq!(None, a.next());    
     }
 
     #[test]

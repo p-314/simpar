@@ -49,7 +49,7 @@
 //! | Paragraph | `#` | empty lines | no |
 //! | Multispace | `~` | one or more whitespaces (`' '`) | no |
 //! | Period | `.` | period (`'.'`) | **yes** |
-//! 
+//! | Literal | `".."` or `'..'` | next occurrence of the literal | no |
 //! 
 //! ## Type Annotations
 //! By using `<var>: <type>` values are automatically converted using the `FromStr` trait:
@@ -102,18 +102,22 @@
 //! For example, if `file` is the content of a CSV file like
 //! 
 //! ```csv
-//! country,capital
-//! germany,Berlin
+//! country,capital,population,top-level domain
+//! germany,Berlin,83497147,.de
 //! ```
 //! 
 //! then parsing can be done with:
 //! 
 //! ```
 //! # use simpar::parse;
-//! # let file = r"country,capital
-//! # germany,Berlin";
+//! # let file = r"country,capital,population,top-level domain
+//! # germany,Berlin,83497147,.de";
 //! 
-//! parse!(file -> _; {, = ','} country, capital);
+//! parse!(file -> _; {, = ','} country, capital, population: u64, tld);
+//! # assert_eq!(country, "germany");
+//! # assert_eq!(capital, "Berlin");
+//! # assert_eq!(population, 83497147);
+//! # assert_eq!(tld, ".de");
 //! ```
 
 
