@@ -1,8 +1,13 @@
 # simpar
 
+[![crates.io](https://img.shields.io/crates/v/simpar)](https://crates.io/crates/simpar)
+[![docs.rs](https://img.shields.io/docsrs/simpar)](https://docs.rs/simpar/latest/simpar/)
+![Crates.io License](https://img.shields.io/crates/l/simpar)
+
+
 A simple declarative string parser using string operations from the standard library.
 
-The `parse!` macro allows you to extract variables from strings based on specified
+The [`parse!`](https://docs.rs/simpar/latest/simpar/macro.parse.html) macro allows you to extract variables from strings based on specified
 patterns, with support for type conversion and various separators.
 
 For example, if `s` is a string of the form `"<name> <age> birthday: <day>.<month>.<year>"`
@@ -41,6 +46,7 @@ Supported separators are:
 | Paragraph | `#` | empty lines | no |
 | Multispace | `~` | one or more whitespaces (`' '`) | no |
 | Period | `.` | period (`'.'`) | **yes** |
+| Literal | `".."` or `'..'` | next occurrence of the literal | no |
 
 
 ## Type Annotations
@@ -94,16 +100,18 @@ e.g. a string or char.
 For example, if `file` is the content of a CSV file like
 
 ```csv
-country,capital
-germany,Berlin
+country,capital,population,top-level domain
+germany,Berlin,83497147,.de
 ```
 
 then parsing can be done with:
 
 ```rust
-parse!(file -> _; {, = ','} country, capital);
+parse!(file -> _; {, = ','} country, capital, population: u64, tld);
 ```
 
 # License
 Simpar is distributed under the terms of both the MIT license and the
 Apache License (Version 2.0).
+
+See [LICENSE-MIT](LICENSE-MIT) or [LICENSE-APACHE](LICENSE-APACHE) for more details.
