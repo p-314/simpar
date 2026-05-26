@@ -39,6 +39,7 @@ use proc_macro::TokenStream;
 /// | Paragraph | `#` | empty lines | no |
 /// | Multispace | `~` | one or more whitespaces (`' '`) | no |
 /// | Period | `.` | period (`'.'`) | **yes** |
+/// | Literal | `".."` or `'..'` | next occurrence of the literal | no |
 ///
 /// ## Examples
 ///
