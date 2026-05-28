@@ -27,7 +27,8 @@ const ITER: IdentHelper = new_ident!("iter");
 struct Variable {
     mutability: Option<Token![mut]>,
     ident: Ident,
-    conversion_type: Option<Type>,
+    // optional conversion type and if the result should be unwrapped
+    conversion_type: Option<(Type, bool)>,
 }
 
 impl ToTokens for Variable {
@@ -172,8 +173,11 @@ impl ToTokens for Match {
             Match::Var(variable) => {
                 let var = variable.ident.clone();
                 tokens.extend(match &variable.conversion_type {
-                    Some(ty) => quote! {
+                    Some((ty, true)) => quote! {
                         #var = #RETURN_DATA.parse::<#ty>().expect("Parsing failed!");
+                    },
+                    Some((ty, false)) => quote! {
+                        #var = #RETURN_DATA.parse::<#ty>();
                     },
                     None => quote! {
                         #var = #RETURN_DATA;
@@ -203,8 +207,9 @@ impl ToTokens for Match {
                     Separator::LiteralStr(lit_str) => {
                         quote! {let #ITER = #RETURN_DATA.split(#lit_str);}
                     }
-                    Separator::LiteralChar(lit_char) => 
-                        quote! {let #ITER = #RETURN_DATA.split(#lit_char);},
+                    Separator::LiteralChar(lit_char) => {
+                        quote! {let #ITER = #RETURN_DATA.split(#lit_char);}
+                    }
                 });
 
                 let col = collect.then_some(quote! {.collect::<Vec<_>>()});
@@ -379,10 +384,16 @@ impl syn::parse::Parse for Format {
                 let ty = input
                     .peek(Token![:])
                     .then(|| {
-                        input.parse::<Token![:]>()?;
-                        input.parse::<Type>()
+                        input.parse::<Token![:]>().unwrap();
+                        let ty = input.parse::<Type>()?;
+                        if input.peek(Token![?]) {
+                            input.parse::<Token![?]>().unwrap();
+                            Ok((ty, false))
+                        } else {
+                            Ok((ty, true))
+                        }
                     })
-                    .map_or(Ok(None), |y| y.map(Some))?;
+                    .map_or(Ok(None), |y: syn::Result<(Type, bool)>| y.map(Some))?;
 
                 let var = Variable {
                     mutability: mu,

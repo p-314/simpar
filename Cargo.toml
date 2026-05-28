@@ -8,7 +8,7 @@ authors = { workspace = true }
 repository = { workspace = true }
 keywords = ["parser", "string", "macro", "proc-macro"]
 categories = ["parsing", "parser-implementations"]
-exclude = [".github"]
+exclude = [".github", "release-plz.toml"]
 
 [workspace.package]
 edition = "2024"

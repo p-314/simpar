@@ -14,9 +14,13 @@ fn main() {
 
     let (dir, map) = parse(input);
 
+    dbg!(dir);
     assert_eq!(dir, "RL");
+
+    let map_vec = map.collect::<Vec<_>>();
+    dbg!(&map_vec);
     assert_eq!(
-        map.collect::<Vec<_>>(),
+        map_vec,
         vec![
             ("AAA", ("BBB", "CCC")),
             ("BBB", ("DDD", "EEE")),
