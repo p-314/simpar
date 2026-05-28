@@ -14,9 +14,14 @@ fn main() {
 
     let (id_ranges, ids) = parse(input);
 
+    let id_ranges_vec = id_ranges.collect::<Vec<_>>();
+    dbg!(&id_ranges_vec);
     assert_eq!(
-        id_ranges.collect::<Vec<_>>(),
+        id_ranges_vec,
         vec![(3, 5), (10, 14), (16, 20), (12, 18),]
     );
-    assert_eq!(ids.collect::<Vec<_>>(), vec![1, 5, 8, 11, 17, 32,]);
+    
+    let ids_vec = ids.collect::<Vec<_>>();
+    dbg!(&ids_vec);
+    assert_eq!(ids_vec, vec![1, 5, 8, 11, 17, 32,]);
 }

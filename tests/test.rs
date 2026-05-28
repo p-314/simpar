@@ -120,7 +120,7 @@ mod sep {
     fn missing_multispace_end() {
         parse!("hello   world" -> _~ _~);
     }
-    
+
     #[test]
     #[should_panic]
     fn missing_literal() {
@@ -238,7 +238,6 @@ mod iter {
         assert_eq!(None, a.next());
     }
 
-
     #[test]
     fn iter_period() {
         parse!("hello.world.!" -> (mut a)*.);
@@ -246,7 +245,7 @@ mod iter {
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
         assert_eq!(Some("!"), a.next());
-        assert_eq!(None, a.next());    
+        assert_eq!(None, a.next());
     }
 
     #[test]
@@ -256,9 +255,8 @@ mod iter {
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
         assert_eq!(Some("!"), a.next());
-        assert_eq!(None, a.next());    
+        assert_eq!(None, a.next());
     }
-
 
     #[test]
     fn iter_literal_char() {
@@ -267,7 +265,7 @@ mod iter {
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
         assert_eq!(Some("!"), a.next());
-        assert_eq!(None, a.next());    
+        assert_eq!(None, a.next());
     }
 
     #[test]
@@ -336,6 +334,26 @@ mod parse {
             <T as FromStr>::Err: Debug,
         {
             parse!(s -> _, r: T; _);
+            r
+        }
+    }
+
+    #[test]
+    fn parse_result() {
+        parse!("2 3.14 test" -> a: u32?, b: f32?, c: usize?);
+
+        assert_eq!(Ok(2u32), a);
+        assert_eq!(Ok(3.14f32), b);
+        assert!(c.is_err());
+    }
+
+    #[test]
+    fn parse_result_generic_impl() {
+        use std::str::FromStr;
+
+        #[allow(unused)]
+        fn f<T: FromStr>(s: &str) -> Result<T, <T as FromStr>::Err> {
+            parse!(s -> _, r: T?; _);
             r
         }
     }
