@@ -1,7 +1,7 @@
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::{Span, TokenStream, TokenTree};
 use quote::{ToTokens, quote};
 use syn::{
-    Ident, LitChar, LitStr, Token, Type, braced, bracketed, parenthesized, parse_macro_input,
+    Expr, Ident, LitChar, LitStr, Token, Type, braced, bracketed, parenthesized, parse_macro_input,
     token::{Brace, Bracket, Paren},
 };
 
@@ -456,28 +456,34 @@ impl syn::parse::Parse for Format {
 }
 
 enum Data {
-    Str(LitStr),
-    Id(Ident),
+    Expr(Expr),
 }
 
 impl ToTokens for Data {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         match self {
-            Data::Str(lit_str) => lit_str.to_tokens(tokens),
-            Data::Id(ident) => ident.to_tokens(tokens),
+            Data::Expr(expr) => expr.to_tokens(tokens),
         }
     }
 }
 
 impl syn::parse::Parse for Data {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        if input.peek(LitStr) {
-            return Ok(Self::Str(input.parse::<LitStr>().unwrap()));
+        let mut expr_tokens = proc_macro2::TokenStream::new();
+
+        // collect tokens into a separate buffer until we see an arrow
+        while !input.is_empty() {
+            if input.peek(Token![->]) {
+                break;
+            }
+
+            // otherwise, move the token into an expression buffer
+            let token: TokenTree = input.parse()?;
+            expr_tokens.extend(std::iter::once(token));
         }
-        if input.peek(Ident) {
-            return Ok(Self::Id(input.parse::<Ident>().unwrap()));
-        }
-        Err(input.error("Expected identifier of string literal."))
+
+        let expr: Expr = syn::parse2(expr_tokens)?;
+        Ok(Self::Expr(expr))
     }
 }
 

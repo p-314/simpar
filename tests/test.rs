@@ -12,6 +12,52 @@ fn one_ident() {
     assert_eq!("hi", a);
 }
 
+mod input {
+    use simpar::parse;
+
+    #[test]
+    fn input_field() {
+        let s = ("hello", "world");
+        parse!(s.0 -> _);
+    }
+
+    #[test]
+    fn input_index() {
+        let s = ["hello", "world"];
+        parse!(s[1] -> _);
+    }
+
+    #[test]
+    fn input_if_expr() {
+        #[allow(unused)]
+        fn f(b: bool) {
+            parse!(if b {"hello"} else {"world"} -> _);
+        }
+    }
+
+    #[test]
+    fn input_block() {
+        parse!({println!("hi"); "hello world"} -> _);
+    }
+
+    #[test]
+    fn input_binary() {
+        struct S {}
+
+        impl std::ops::Sub for S {
+            type Output = &'static str;
+
+            fn sub(self, _rhs: Self) -> Self::Output {
+                "hello world"
+            }
+        }
+
+        let s = S {};
+        let t = S {};
+        parse!(s - t -> _);
+    }
+}
+
 mod sep {
     use simpar::parse;
 
@@ -296,10 +342,7 @@ mod iter {
         parse!("hello world !" -> [a]*,);
 
         let b: Vec<&str> = a;
-        assert!(b.len() == 3);
-        assert_eq!(b[0], "hello");
-        assert_eq!(b[1], "world");
-        assert_eq!(b[2], "!");
+        assert_eq!(vec!["hello", "world", "!"], b);
     }
 }
 
