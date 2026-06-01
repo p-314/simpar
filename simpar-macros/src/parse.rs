@@ -1,7 +1,7 @@
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::{Span, TokenStream, TokenTree};
 use quote::{ToTokens, quote};
 use syn::{
-    Ident, LitChar, LitStr, Token, Type, braced, bracketed, parenthesized, parse_macro_input,
+    Expr, Ident, LitChar, LitStr, Token, Type, braced, bracketed, parenthesized, parse_macro_input,
     token::{Brace, Bracket, Paren},
 };
 
@@ -27,7 +27,8 @@ const ITER: IdentHelper = new_ident!("iter");
 struct Variable {
     mutability: Option<Token![mut]>,
     ident: Ident,
-    conversion_type: Option<Type>,
+    // optional conversion type and if the result should be unwrapped
+    conversion_type: Option<(Type, bool)>,
 }
 
 impl ToTokens for Variable {
@@ -172,8 +173,11 @@ impl ToTokens for Match {
             Match::Var(variable) => {
                 let var = variable.ident.clone();
                 tokens.extend(match &variable.conversion_type {
-                    Some(ty) => quote! {
+                    Some((ty, true)) => quote! {
                         #var = #RETURN_DATA.parse::<#ty>().expect("Parsing failed!");
+                    },
+                    Some((ty, false)) => quote! {
+                        #var = #RETURN_DATA.parse::<#ty>();
                     },
                     None => quote! {
                         #var = #RETURN_DATA;
@@ -203,8 +207,9 @@ impl ToTokens for Match {
                     Separator::LiteralStr(lit_str) => {
                         quote! {let #ITER = #RETURN_DATA.split(#lit_str);}
                     }
-                    Separator::LiteralChar(lit_char) => 
-                        quote! {let #ITER = #RETURN_DATA.split(#lit_char);},
+                    Separator::LiteralChar(lit_char) => {
+                        quote! {let #ITER = #RETURN_DATA.split(#lit_char);}
+                    }
                 });
 
                 let col = collect.then_some(quote! {.collect::<Vec<_>>()});
@@ -379,10 +384,16 @@ impl syn::parse::Parse for Format {
                 let ty = input
                     .peek(Token![:])
                     .then(|| {
-                        input.parse::<Token![:]>()?;
-                        input.parse::<Type>()
+                        input.parse::<Token![:]>().unwrap();
+                        let ty = input.parse::<Type>()?;
+                        if input.peek(Token![?]) {
+                            input.parse::<Token![?]>().unwrap();
+                            Ok((ty, false))
+                        } else {
+                            Ok((ty, true))
+                        }
                     })
-                    .map_or(Ok(None), |y| y.map(Some))?;
+                    .map_or(Ok(None), |y: syn::Result<(Type, bool)>| y.map(Some))?;
 
                 let var = Variable {
                     mutability: mu,
@@ -445,28 +456,34 @@ impl syn::parse::Parse for Format {
 }
 
 enum Data {
-    Str(LitStr),
-    Id(Ident),
+    Expr(Expr),
 }
 
 impl ToTokens for Data {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         match self {
-            Data::Str(lit_str) => lit_str.to_tokens(tokens),
-            Data::Id(ident) => ident.to_tokens(tokens),
+            Data::Expr(expr) => expr.to_tokens(tokens),
         }
     }
 }
 
 impl syn::parse::Parse for Data {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        if input.peek(LitStr) {
-            return Ok(Self::Str(input.parse::<LitStr>().unwrap()));
+        let mut expr_tokens = proc_macro2::TokenStream::new();
+
+        // collect tokens into a separate buffer until we see an arrow
+        while !input.is_empty() {
+            if input.peek(Token![->]) {
+                break;
+            }
+
+            // otherwise, move the token into an expression buffer
+            let token: TokenTree = input.parse()?;
+            expr_tokens.extend(std::iter::once(token));
         }
-        if input.peek(Ident) {
-            return Ok(Self::Id(input.parse::<Ident>().unwrap()));
-        }
-        Err(input.error("Expected identifier of string literal."))
+
+        let expr: Expr = syn::parse2(expr_tokens)?;
+        Ok(Self::Expr(expr))
     }
 }
 

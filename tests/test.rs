@@ -12,6 +12,52 @@ fn one_ident() {
     assert_eq!("hi", a);
 }
 
+mod input {
+    use simpar::parse;
+
+    #[test]
+    fn input_field() {
+        let s = ("hello", "world");
+        parse!(s.0 -> _);
+    }
+
+    #[test]
+    fn input_index() {
+        let s = ["hello", "world"];
+        parse!(s[1] -> _);
+    }
+
+    #[test]
+    fn input_if_expr() {
+        #[allow(unused)]
+        fn f(b: bool) {
+            parse!(if b {"hello"} else {"world"} -> _);
+        }
+    }
+
+    #[test]
+    fn input_block() {
+        parse!({println!("hi"); "hello world"} -> _);
+    }
+
+    #[test]
+    fn input_binary() {
+        struct S {}
+
+        impl std::ops::Sub for S {
+            type Output = &'static str;
+
+            fn sub(self, _rhs: Self) -> Self::Output {
+                "hello world"
+            }
+        }
+
+        let s = S {};
+        let t = S {};
+        parse!(s - t -> _);
+    }
+}
+
 mod sep {
     use simpar::parse;
 
@@ -120,7 +166,7 @@ mod sep {
     fn missing_multispace_end() {
         parse!("hello   world" -> _~ _~);
     }
-    
+
     #[test]
     #[should_panic]
     fn missing_literal() {
@@ -238,7 +284,6 @@ mod iter {
         assert_eq!(None, a.next());
     }
 
-
     #[test]
     fn iter_period() {
         parse!("hello.world.!" -> (mut a)*.);
@@ -246,7 +291,7 @@ mod iter {
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
         assert_eq!(Some("!"), a.next());
-        assert_eq!(None, a.next());    
+        assert_eq!(None, a.next());
     }
 
     #[test]
@@ -256,9 +301,8 @@ mod iter {
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
         assert_eq!(Some("!"), a.next());
-        assert_eq!(None, a.next());    
+        assert_eq!(None, a.next());
     }
-
 
     #[test]
     fn iter_literal_char() {
@@ -267,7 +311,7 @@ mod iter {
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
         assert_eq!(Some("!"), a.next());
-        assert_eq!(None, a.next());    
+        assert_eq!(None, a.next());
     }
 
     #[test]
@@ -298,10 +342,7 @@ mod iter {
         parse!("hello world !" -> [a]*,);
 
         let b: Vec<&str> = a;
-        assert!(b.len() == 3);
-        assert_eq!(b[0], "hello");
-        assert_eq!(b[1], "world");
-        assert_eq!(b[2], "!");
+        assert_eq!(vec!["hello", "world", "!"], b);
     }
 }
 
@@ -336,6 +377,26 @@ mod parse {
             <T as FromStr>::Err: Debug,
         {
             parse!(s -> _, r: T; _);
+            r
+        }
+    }
+
+    #[test]
+    fn parse_result() {
+        parse!("2 3.14 test" -> a: u32?, b: f32?, c: usize?);
+
+        assert_eq!(Ok(2u32), a);
+        assert_eq!(Ok(3.14f32), b);
+        assert!(c.is_err());
+    }
+
+    #[test]
+    fn parse_result_generic_impl() {
+        use std::str::FromStr;
+
+        #[allow(unused)]
+        fn f<T: FromStr>(s: &str) -> Result<T, <T as FromStr>::Err> {
+            parse!(s -> _, r: T?; _);
             r
         }
     }

@@ -8,6 +8,7 @@ authors = { workspace = true }
 repository = { workspace = true }
 keywords = ["parser", "string", "macro", "proc-macro"]
 categories = ["parsing", "parser-implementations"]
+exclude = [".github", "release-plz.toml"]
 
 [workspace.package]
 edition = "2024"
@@ -25,3 +26,13 @@ simpar-macros = { path = "simpar-macros" }
 simpar-macros = { version = "0.1.1", path = "simpar-macros", features = [
     "macros",
 ] }
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+rustdoc-args = [
+    "--generate-link-to-definition",
+    "--generate-macro-expansion",
+    "--extern-html-root-url=core=https://doc.rust-lang.org",
+    "--extern-html-root-url=alloc=https://doc.rust-lang.org",
+    "--extern-html-root-url=std=https://doc.rust-lang.org",
+]

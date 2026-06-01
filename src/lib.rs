@@ -2,7 +2,7 @@
 //! 
 //! A simple declarative string parser using string operations from the standard library.
 //! 
-//! The `parse!` macro allows you to extract variables from strings based on specified
+//! The [`parse!`] macro allows you to extract variables from strings based on specified
 //! patterns, with support for type conversion and various separators.
 //! 
 //! For example, if `s` is a string of the form `"<name> <age> birthday: <day>.<month>.<year>"`
@@ -52,17 +52,17 @@
 //! | Literal | `".."` or `'..'` | next occurrence of the literal | no |
 //! 
 //! ## Type Annotations
-//! By using `<var>: <type>` values are automatically converted using the `FromStr` trait:
+//! By using `<var>: <type>` values are automatically converted using the `FromStr` trait.
+//! The `Result` is unwrapped by default. Using `<var>: <type>?` instead returns the `Result`
+//! and does not panic.
 //! 
 //! ```
 //! use simpar::parse;
 //! 
-//! parse!("42 3.14" -> count: u32, ratio: f64);
+//! parse!("42 3.14" -> count: u32, ratio: f64?);
 //! assert_eq!(count, 42);
-//! assert_eq!(ratio, 3.14);
+//! assert_eq!(ratio, Ok(3.14));
 //! ```
-//! 
-//! The program will panic, if any of the conversions fail.
 //! 
 //! ## Repetitions
 //! 
