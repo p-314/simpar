@@ -1,6 +1,6 @@
 [package]
 name = "simpar"
-version = "0.1.1"
+version = "0.1.2"
 edition = { workspace = true }
 description = "A simple declarative string parser using string operations from the standard library"
 license = { workspace = true }
@@ -23,7 +23,7 @@ members = ["simpar-macros"]
 simpar-macros = { path = "simpar-macros" }
 
 [dependencies]
-simpar-macros = { version = "0.1.1", path = "simpar-macros", features = [
+simpar-macros = { version = "0.1.2", path = "simpar-macros", features = [
     "macros",
 ] }
 

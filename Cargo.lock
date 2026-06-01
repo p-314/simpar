@@ -22,14 +22,14 @@ dependencies = [
 
 [[package]]
 name = "simpar"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "simpar-macros",
 ]
 
 [[package]]
 name = "simpar-macros"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "proc-macro2",
  "quote",

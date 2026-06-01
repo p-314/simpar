@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/p-314/simpar/compare/simpar-v0.1.1...simpar-v0.1.2) - 2026-06-01
+
+### Added
+
+- allow for expressions as input
+- ? type conversion
+
+### Fixed
+
+- fixed parse! documentation
+
 ## [0.1.1](https://github.com/p-314/simpar/compare/simpar-v0.1.0...simpar-v0.1.1) - 2026-05-26
 
 ### Added
