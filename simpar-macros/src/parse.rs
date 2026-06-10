@@ -71,7 +71,7 @@ macro_rules! parse_spat {
             inner.parse::<Token![,]>()?;
             Separator::Space
         } else {
-            panic!("Expected programmable separator (, or .)!");
+            return Err($input.error("Expected programmable separator (, or .)!"));
         };
 
         inner.parse::<Token![=]>()?;
@@ -83,7 +83,7 @@ macro_rules! parse_spat {
         } else if inner.peek(Ident) {
             SplitPattern::Var(inner.parse::<Ident>()?)
         } else {
-            unreachable!();
+            return Err($input.error("Expected literal or identifier!"));
         };
 
         let pro = MatchSeparator::Chg(sep(split_pat));
@@ -125,7 +125,7 @@ macro_rules! parse_sep {
         } else if $input.peek(LitChar) {
             $sep = Separator::LiteralChar($input.parse::<LitChar>()?);
         } else {
-            return Err($input.error("Expected separator (one of ,;#~. or string/char literal)!"))
+            return Err($input.error("Expected separator (one of ,;#~. or string/char literal)!"));
         }
     };
 }
@@ -500,7 +500,7 @@ impl Parser {
         }
 
         if !self.format.check_rep() {
-            todo!("cant handle multivariable repetitions");
+            panic!("Multivariable repetitions are unsupported.");
         }
 
         CheckedParser(self)

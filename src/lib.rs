@@ -1,26 +1,26 @@
 //! # simpar
-//! 
+//!
 //! A simple declarative string parser using string operations from the standard library.
-//! 
+//!
 //! The [`parse!`] macro allows you to extract variables from strings based on specified
 //! patterns, with support for type conversion and various separators.
-//! 
+//!
 //! For example, if `s` is a string of the form `"<name> <age> birthday: <day>.<month>.<year>"`
 //! then name, age and the birthday can be retrieved with:
-//! 
+//!
 //! ```
 //! use simpar::parse;
-//! 
+//!
 //! let s = "Alice 42 birthday: 1.1.1970";
-//! 
+//!
 //! parse!(s -> name, age: u8, _, day.month.year);
-//! 
+//!
 //! assert_eq!(name, "Alice");
 //! assert_eq!(age, 42);
 //! assert_eq!((day, month, year), ("1", "1", "1970"));
 //! ```
-//! 
-//! 
+//!
+//!
 //! ## Pattern Syntax Reference
 //! The `parse!` macro takes input (e.g. a string or identifier) and a pattern:
 //!
@@ -29,19 +29,19 @@
 //! # let input = "";
 //! parse!(input -> pattern);
 //! ```
-//! 
-//! A pattern consists of matches (usually identifiers) followed by separators. Valid 
+//!
+//! A pattern consists of matches (usually identifiers) followed by separators. Valid
 //! matches are:
-//! 
+//!
 //! - `<var>` - capture as string slice and assign it to `<var>`
 //! - `<var>: <type>` - capture and convert to type
 //! - `_` - blank (skip)
 //! - `(<pattern>)*<sep>` - repetition where `<sep>` can be any valid separator
 //! - `[<pattern>]*<sep>` - repetition collected into a `Vec`
-//! 
-//! 
+//!
+//!
 //! Supported separators are:
-//! 
+//!
 //! |separator|symbol|splits at|programmable?|
 //! |:---|:--:|----|:--:|
 //! | Space | `,` | whitespace (`' '`) | **yes** |
@@ -50,76 +50,75 @@
 //! | Multispace | `~` | one or more whitespaces (`' '`) | no |
 //! | Period | `.` | period (`'.'`) | **yes** |
 //! | Literal | `".."` or `'..'` | next occurrence of the literal | no |
-//! 
+//!
 //! ## Type Annotations
 //! By using `<var>: <type>` values are automatically converted using the `FromStr` trait.
 //! The `Result` is unwrapped by default. Using `<var>: <type>?` instead returns the `Result`
 //! and does not panic.
-//! 
+//!
 //! ```
 //! use simpar::parse;
-//! 
+//!
 //! parse!("42 3.14" -> count: u32, ratio: f64?);
 //! assert_eq!(count, 42);
 //! assert_eq!(ratio, Ok(3.14));
 //! ```
-//! 
+//!
 //! ## Repetitions
-//! 
+//!
 //! Repeating patterns can be extracted using `(<pattern>)*<separator>`:
-//! 
+//!
 //! ```
 //! use simpar::parse;
-//! 
+//!
 //! parse!("1 2 3 4" -> (mut n: i32)*,);
-//! 
+//!
 //! assert_eq!(n.next(), Some(1));
 //! assert_eq!(n.next(), Some(2));
 //! assert_eq!(n.next(), Some(3));
 //! assert_eq!(n.next(), Some(4));
 //! assert_eq!(n.next(), None);
 //! ```
-//! 
+//!
 //! Repetitions return iterators, but can be directly collected into vectors using
 //! the `[<pattern>]*<separator>` syntax.
-//! 
-//! 
+//!
+//!
 //! ```
 //! use simpar::parse;
-//! 
+//!
 //! parse!("1 2 3 4" -> [n: i32]*,);
-//! 
+//!
 //! assert_eq!(n, vec![1, 2, 3, 4]);
 //! ```
-//! 
+//!
 //! At the moment repetitions can contain at most one identifier.
-//! 
+//!
 //! ## Programmable separators
 //! Some separators can be modified. `{<separator> = <pattern>}` sets the sperator to `<pattern>`
-//! where `<pattern>` can be anything that implements the standard library `Pattern` trait, 
+//! where `<pattern>` can be anything that implements the standard library `Pattern` trait,
 //! e.g. a string or char.
-//! 
+//!
 //! For example, if `file` is the content of a CSV file like
-//! 
+//!
 //! ```csv
 //! country,capital,population,top-level domain
 //! germany,Berlin,83497147,.de
 //! ```
-//! 
+//!
 //! then parsing can be done with:
-//! 
+//!
 //! ```
 //! # use simpar::parse;
 //! # let file = r"country,capital,population,top-level domain
 //! # germany,Berlin,83497147,.de";
-//! 
+//!
 //! parse!(file -> _; {, = ','} country, capital, population: u64, tld);
 //! # assert_eq!(country, "germany");
 //! # assert_eq!(capital, "Berlin");
 //! # assert_eq!(population, 83497147);
 //! # assert_eq!(tld, ".de");
 //! ```
-
 
 pub use simpar_macros::parse;
 

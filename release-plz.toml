@@ -42,10 +42,10 @@ body = """
 """
 
 commit_parsers = [
-  { message = "^feat", group = "added" },
-  { message = "^changed", group = "changed" },
-  { message = "^deprecated", group = "deprecated" },
-  { message = "^fix", group = "fixed" },
-  { message = "^security", group = "security" },
-  { message = "^other", group = "other" },
+    { message = "^feat", group = "added" },
+    { message = "^changed", group = "changed" },
+    { message = "^deprecated", group = "deprecated" },
+    { message = "^fix", group = "fixed" },
+    { message = "^security", group = "security" },
+    { message = "^other", group = "other" },
 ]
