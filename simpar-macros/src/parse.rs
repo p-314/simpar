@@ -214,7 +214,7 @@ impl ToTokens for Match {
 
                 let col = collect.then_some(quote! {.collect::<Vec<_>>()});
                 tokens.extend(quote! {
-                    #assign = #ITER.map(|#INPUT| {
+                    #assign = #ITER.map(|mut #INPUT| {
                         #decl
                         #(#match_separators)*
                         #var
