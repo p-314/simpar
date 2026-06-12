@@ -330,6 +330,15 @@ mod iter {
     }
 
     #[test]
+    fn iter_inside() {
+        parse!("Hello world\r\n\n! !" -> (_, mut a)*#);
+
+        assert_eq!(Some("world"), a.next());
+        assert_eq!(Some("!"), a.next());
+        assert_eq!(None, a.next());
+    }
+
+    #[test]
     fn iter_iter() {
         parse!("hello world\n1 2 3" -> ((a)*,)*;);
 

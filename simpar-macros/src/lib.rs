@@ -21,7 +21,7 @@ use proc_macro::TokenStream;
 /// # let input = "";
 /// parse!(input -> pattern)
 /// ```
-/// A pattern consists of matches (usually identifiers) followed by separators. 
+/// A pattern consists of matches (usually identifiers) followed by separators.
 ///
 /// Match syntax:
 /// - `<var>` - capture as string slice and assign it to `<var>`
