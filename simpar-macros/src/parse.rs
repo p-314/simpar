@@ -410,8 +410,8 @@ impl syn::parse::Parse for Format {
                 let Format(inner_format) = inner.parse::<Format>()?;
 
                 // get rep separator
-                input.parse::<Token![*]>()?;
                 parse_sep!(format, input, sep);
+                input.parse::<Token![*]>()?;
 
                 mat = Match::Rep(inner_format, sep, false);
             } else if input.peek(Bracket) {
@@ -421,8 +421,8 @@ impl syn::parse::Parse for Format {
                 let Format(inner_format) = inner.parse::<Format>()?;
 
                 // get rep separator
-                input.parse::<Token![*]>()?;
                 parse_sep!(format, input, sep);
+                input.parse::<Token![*]>()?;
 
                 mat = Match::Rep(inner_format, sep, true);
             } else if input.peek(Brace) {

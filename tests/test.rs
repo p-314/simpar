@@ -232,7 +232,7 @@ mod programmable {
 
     #[test]
     fn change_iter() {
-        parse!("1,2,3" -> {, = ','} (mut a: u8)*,);
+        parse!("1,2,3" -> {, = ','} (mut a: u8),*);
 
         assert_eq!(Some(1), a.next());
         assert_eq!(Some(2), a.next());
@@ -246,7 +246,7 @@ mod iter {
 
     #[test]
     fn iter_space() {
-        parse!("hello world !" -> (mut a)*,);
+        parse!("hello world !" -> (mut a),*);
 
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
@@ -256,7 +256,7 @@ mod iter {
 
     #[test]
     fn iter_newline() {
-        parse!("hello\nworld\r\n!" -> (mut a)*;);
+        parse!("hello\nworld\r\n!" -> (mut a);*);
 
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
@@ -266,7 +266,7 @@ mod iter {
 
     #[test]
     fn iter_multispace() {
-        parse!("hello       world    !" -> (mut a)*~);
+        parse!("hello       world    !" -> (mut a)~*);
 
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
@@ -276,7 +276,7 @@ mod iter {
 
     #[test]
     fn iter_paragraphs() {
-        parse!("hello\n\nworld\r\n\n!" -> (mut a)*#);
+        parse!("hello\n\nworld\r\n\n!" -> (mut a)#*);
 
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
@@ -286,7 +286,7 @@ mod iter {
 
     #[test]
     fn iter_period() {
-        parse!("hello.world.!" -> (mut a)*.);
+        parse!("hello.world.!" -> (mut a).*);
 
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
@@ -296,7 +296,7 @@ mod iter {
 
     #[test]
     fn iter_literal_str() {
-        parse!("hello123world123!" -> (mut a)*"123");
+        parse!("hello123world123!" -> (mut a)"123"*);
 
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
@@ -306,7 +306,7 @@ mod iter {
 
     #[test]
     fn iter_literal_char() {
-        parse!("hello1world1!" -> (mut a)*'1');
+        parse!("hello1world1!" -> (mut a)'1'*);
 
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
@@ -316,7 +316,7 @@ mod iter {
 
     #[test]
     fn iter_between() {
-        parse!("test: hello world\r\n\n!" -> _, (mut a)*,# b);
+        parse!("test: hello world\r\n\n!" -> _, (mut a),* # b);
 
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
@@ -326,12 +326,12 @@ mod iter {
 
     #[test]
     fn iter_zero_ident() {
-        parse!("hello world" -> (_)*,);
+        parse!("hello world" -> (_),*);
     }
 
     #[test]
     fn iter_inside() {
-        parse!("Hello world\r\n\n! !" -> (_, mut a)*#);
+        parse!("Hello world\r\n\n! !" -> (_, mut a)#*);
 
         assert_eq!(Some("world"), a.next());
         assert_eq!(Some("!"), a.next());
@@ -340,7 +340,7 @@ mod iter {
 
     #[test]
     fn iter_iter() {
-        parse!("hello world\n1 2 3" -> ((a)*,)*;);
+        parse!("hello world\n1 2 3" -> ((a),*);*);
 
         let owned = a.map(|line| line.collect::<Vec<_>>()).collect::<Vec<_>>();
         assert_eq!(vec![vec!["hello", "world"], vec!["1", "2", "3"]], owned);
@@ -348,7 +348,7 @@ mod iter {
 
     #[test]
     fn iter_collect() {
-        parse!("hello world !" -> [a]*,);
+        parse!("hello world !" -> [a],*);
 
         let b: Vec<&str> = a;
         assert_eq!(vec!["hello", "world", "!"], b);
@@ -367,7 +367,7 @@ mod parse {
 
     #[test]
     fn iter_parse() {
-        parse!("1 2 3" -> (mut a: u16)*,);
+        parse!("1 2 3" -> (mut a: u16),*);
 
         assert_eq!(Some(1u16), a.next());
         assert_eq!(Some(2u16), a.next());

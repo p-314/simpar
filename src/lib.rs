@@ -36,8 +36,8 @@
 //! - `<var>` - capture as string slice and assign it to `<var>`
 //! - `<var>: <type>` - capture and convert to type
 //! - `_` - blank (skip)
-//! - `(<pattern>)*<sep>` - repetition where `<sep>` can be any valid separator
-//! - `[<pattern>]*<sep>` - repetition collected into a `Vec`
+//! - `(<pattern>)<sep>*` - repetition where `<sep>` can be any valid separator
+//! - `[<pattern>]<sep>*` - repetition collected into a `Vec`
 //!
 //!
 //! Supported separators are:
@@ -66,12 +66,12 @@
 //!
 //! ## Repetitions
 //!
-//! Repeating patterns can be extracted using `(<pattern>)*<separator>`:
+//! Repeating patterns can be extracted using `(<pattern>)<separator>*`:
 //!
 //! ```
 //! use simpar::parse;
 //!
-//! parse!("1 2 3 4" -> (mut n: i32)*,);
+//! parse!("1 2 3 4" -> (mut n: i32),*);
 //!
 //! assert_eq!(n.next(), Some(1));
 //! assert_eq!(n.next(), Some(2));
@@ -81,13 +81,13 @@
 //! ```
 //!
 //! Repetitions return iterators, but can be directly collected into vectors using
-//! the `[<pattern>]*<separator>` syntax.
+//! the `[<pattern>]<separator>*` syntax.
 //!
 //!
 //! ```
 //! use simpar::parse;
 //!
-//! parse!("1 2 3 4" -> [n: i32]*,);
+//! parse!("1 2 3 4" -> [n: i32],*);
 //!
 //! assert_eq!(n, vec![1, 2, 3, 4]);
 //! ```
