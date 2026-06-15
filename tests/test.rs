@@ -1,4 +1,4 @@
-use simpar::parse;
+use simpar::{ParagraphIterable, parse};
 
 #[test]
 fn blank() {
@@ -423,4 +423,22 @@ fn split_fn() {
     let (a, b) = split_line(s).unwrap();
     assert_eq!(a, "hi");
     assert_eq!(b, "\r\n");
+}
+
+#[test]
+fn split_iter() {
+    let s = "hi\n\nmom\n\n\n!";
+    // hi
+    //-
+    // mom
+    //-
+    //-
+    // !
+
+    let mut iter = s.paragraphs();
+    assert_eq!(iter.next(), Some("hi"));
+    assert_eq!(iter.next(), Some("mom"));
+    assert_eq!(iter.next(), Some(""));
+    assert_eq!(iter.next(), Some("!"));
+    assert_eq!(iter.next(), None);
 }

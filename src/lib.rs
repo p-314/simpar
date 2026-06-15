@@ -214,6 +214,11 @@ impl<'a> Iterator for ParagraphIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(next_line) = self.lines.next() {
+            // if `next_line` is empty then the paragraph is empty
+            if next_line.is_empty() {
+                return Some(next_line);
+            }
+
             // SAFETY: `next_line` and `source` reference the same string and
             // `next_line` is a subslice of `source`
             let start_index = unsafe {
