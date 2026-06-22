@@ -46,10 +46,11 @@
 //! |:---|:--:|----|:--:|
 //! | Space | `,` | whitespace (`' '`) | **yes** |
 //! | Newline | `;` | newline (`'\n'` or `"\r\n"`) | no |
-//! | Paragraph | `#` | empty lines | no |
+//! | Paragraph | `#` | empty line | no |
 //! | Multispace | `~` | one or more whitespaces (`' '`) | no |
 //! | Period | `.` | period (`'.'`) | **yes** |
-//! | Literal | `".."` or `'..'` | next occurrence of the literal | no |
+//! | Literal | literal char or string | next occurrence of the literal | no |
+//! | ByteOffset | `[+i]` with an integer literal `i` | byte index `i` | no |
 //!
 //! ## Type Annotations
 //! By using `<var>: <type>` values are automatically converted using the `FromStr` trait.
@@ -120,6 +121,8 @@
 //! # assert_eq!(tld, ".de");
 //! ```
 
+use std::str::Lines;
+
 pub use simpar_macros::parse;
 
 /// Splits a string at the first newline.
@@ -160,24 +163,11 @@ pub fn split_line(s: &str) -> Option<(&str, &str)> {
 /// ```
 #[inline]
 pub fn split_paragraph(s: &str) -> Option<(&str, &str)> {
-    if let Some(empty_line) = s.lines().find(|line| line.is_empty()) {
-        let (mut paragraph, mut remainder) = unsafe {
-            // SAFETY: `empty_line` is a subslice of `s`
-            let i = empty_line.as_ptr().offset_from_unsigned(s.as_ptr());
-            // SAFETY: `i` is a valid slice index
-            s.split_at_checked(i).unwrap_unchecked()
-        };
+    let mut iter = s.paragraphs();
+    let paragraph = iter.next()?;
+    let remainder = iter.remainder()?;
 
-        paragraph = paragraph.strip_suffix('\n').unwrap_or(paragraph);
-        paragraph = paragraph.strip_suffix('\r').unwrap_or(paragraph);
-
-        remainder = remainder.strip_prefix('\r').unwrap_or(remainder);
-        remainder = remainder.strip_prefix('\n').unwrap_or(remainder);
-
-        Some((paragraph, remainder))
-    } else {
-        None
-    }
+    Some((paragraph, remainder))
 }
 
 /// Splits a string at the first space, trimming leading spaces from the remainder.
@@ -206,50 +196,57 @@ pub fn split_multispace(s: &str) -> Option<(&str, &str)> {
 /// Iterator over text paragraphs separated by empty lines.
 pub struct ParagraphIter<'a> {
     source: &'a str,
-    lines: std::str::Lines<'a>,
+    lines: Lines<'a>,
+}
+
+impl<'a> ParagraphIter<'a> {
+    /// Consume the iterator and return the remaining string or `None` if
+    /// the iterator is empty.
+    #[inline]
+    pub fn remainder(mut self) -> Option<&'a str> {
+        let start_index = unsafe {
+            self.next()?
+                .as_ptr()
+                .offset_from_unsigned(self.source.as_ptr())
+        };
+        Some(&self.source[start_index..])
+    }
 }
 
 impl<'a> Iterator for ParagraphIter<'a> {
     type Item = &'a str;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(next_line) = self.lines.next() {
-            // if `next_line` is empty then the paragraph is empty
-            if next_line.is_empty() {
-                return Some(next_line);
-            }
-
-            // SAFETY: `next_line` and `source` reference the same string and
-            // `next_line` is a subslice of `source`
-            let start_index = unsafe {
-                next_line
-                    .as_ptr()
-                    .offset_from_unsigned(self.source.as_ptr())
-            };
-            if let Some(empty_line) = self.lines.find(|line| line.is_empty()) {
-                // SAFETY: `empty_line` is a subslice of `source`
-                let end_index = unsafe {
-                    empty_line
-                        .as_ptr()
-                        .offset_from_unsigned(self.source.as_ptr())
-                };
-                let mut paragraph = &self.source[start_index..end_index];
-                paragraph = paragraph.strip_suffix('\n').unwrap_or(paragraph);
-                paragraph = paragraph.strip_suffix('\r').unwrap_or(paragraph);
-
-                Some(paragraph)
-            } else {
-                Some(&self.source[start_index..])
-            }
-        } else {
-            None
+        let first_line = self.lines.next()?;
+        if first_line.is_empty() {
+            return Some(first_line);
         }
+
+        let source_ptr = self.source.as_ptr();
+        // SAFETY: `first_line` is a subslice of `source`
+        let start_index = unsafe { first_line.as_ptr().offset_from_unsigned(source_ptr) };
+        let mut end_index = start_index + first_line.len();
+
+        for next_line in self.lines.by_ref() {
+            if next_line.is_empty() {
+                break;
+            }
+            // SAFETY: `next_line` is a subslice of `source`
+            end_index =
+                unsafe { next_line.as_ptr().offset_from_unsigned(source_ptr) } + next_line.len();
+        }
+
+        // `start_index` and `end_index` are both in bounds and on UTF-8 boundarys
+        Some(unsafe { self.source.get_unchecked(start_index..end_index) })
     }
 }
 
 /// Provides paragraph iteration over strings.
 pub trait ParagraphIterable {
-    /// Returns an iterator over paragraphs (text separated by empty lines).
+    /// Returns an iterator over paragraphs (text separated by exactly one empty line).
+    ///
+    /// Paragraph terminators are not included in the paragraphs returned by the iterator.
     fn paragraphs<'a>(&'a self) -> ParagraphIter<'a>;
 }
 
@@ -259,5 +256,127 @@ impl ParagraphIterable for str {
             source: self,
             lines: self.lines(),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{ParagraphIterable, split_line, split_paragraph};
+
+    #[test]
+    fn paragraph() {
+        let s = "hello\n\nworld\n\n!";
+        let (par, rem) = split_paragraph(s).unwrap();
+        assert_eq!(par, "hello");
+        assert_eq!(rem, "world\n\n!");
+    }
+
+    #[test]
+    fn paragraph_carriage_return() {
+        let s = "hello\r\n\r\nworld\r\n\n!";
+        let (par, rem) = split_paragraph(s).unwrap();
+        assert_eq!(par, "hello");
+        assert_eq!(rem, "world\r\n\n!");
+
+        let (par, rem) = split_paragraph(rem).unwrap();
+        assert_eq!(par, "world");
+        assert_eq!(rem, "!");
+    }
+
+    #[test]
+    fn paragraph_terminator() {
+        // ending with an empty paragraph results in no splitting
+        let s = "hi\r\n\r\n";
+        assert!(split_paragraph(s).is_none());
+    }
+
+    #[test]
+    fn line() {
+        let s = "hello\nworld\n!";
+        let (par, rem) = split_line(s).unwrap();
+        assert_eq!(par, "hello");
+        assert_eq!(rem, "world\n!");
+    }
+
+    #[test]
+    fn line_carriage_return() {
+        let s = "hello\r\nworld\r\n!";
+        let (par, rem) = split_line(s).unwrap();
+        assert_eq!(par, "hello");
+        assert_eq!(rem, "world\r\n!");
+    }
+
+    #[test]
+    fn line_terminator() {
+        // ending with an empty line results in no splitting
+        let s = "hi\n";
+        assert!(split_paragraph(s).is_none());
+
+        let s = "hi\r\n";
+        assert!(split_paragraph(s).is_none());
+    }
+
+    #[test]
+    fn paragraph_iter() {
+        let s = "hi\n\nmom\n\n\n!";
+        // hi
+        //-
+        // mom
+        //-
+        //-
+        // !
+
+        let mut iter = s.paragraphs();
+        assert_eq!(iter.next(), Some("hi"));
+        assert_eq!(iter.next(), Some("mom"));
+        assert_eq!(iter.next(), Some(""));
+        assert_eq!(iter.next(), Some("!"));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn paragraph_iter_carriage_return() {
+        let s = "hi\n\r\nmom\r\n\n\r\n!";
+        // hi
+        //-
+        // mom
+        //-
+        //-
+        // !
+
+        let mut iter = s.paragraphs();
+        assert_eq!(iter.next(), Some("hi"));
+        assert_eq!(iter.next(), Some("mom"));
+        assert_eq!(iter.next(), Some(""));
+        assert_eq!(iter.next(), Some("!"));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn paragraph_iter_terminator() {
+        // `s` ends with two empty lines, but the last one ends acts as terminator
+        // -> only one empty paragraph is returned
+        let s = "test\n\n\n";
+        // test
+        //-
+        //-
+
+        let mut iter = s.paragraphs();
+        assert_eq!(iter.next(), Some("test"));
+        assert_eq!(iter.next(), Some(""));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn paragraph_iter_empty_line_start() {
+        // `s` starts with an empty line -> the first paragraph is empty
+        let s = "\ntest";
+        //-
+        // test
+
+        let mut iter = s.paragraphs();
+        assert_eq!(iter.next(), Some(""));
+        assert_eq!(iter.next(), Some("test"));
+        assert_eq!(iter.next(), None);
     }
 }
