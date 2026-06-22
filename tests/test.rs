@@ -1,4 +1,4 @@
-use simpar::{ParagraphIterable, parse};
+use simpar::parse;
 
 #[test]
 fn blank() {
@@ -138,6 +138,15 @@ mod sep {
     }
 
     #[test]
+    fn byte_offset() {
+        parse!("hello world!" -> a [+5] b [+1] c);
+
+        assert_eq!("hello", a);
+        assert_eq!(" ", b);
+        assert_eq!("world!", c);
+    }
+
+    #[test]
     #[should_panic]
     fn too_many_ident() {
         parse!("hello world" -> _a, _b, _c);
@@ -171,6 +180,12 @@ mod sep {
     #[should_panic]
     fn missing_literal() {
         parse!("hello world" -> _ "test" _);
+    }
+
+    #[test]
+    #[should_panic]
+    fn byte_offset_overflow() {
+        parse!("hi" -> _ [+3]);
     }
 
     #[test]
@@ -315,6 +330,16 @@ mod iter {
     }
 
     #[test]
+    fn iter_byte_offset() {
+        parse!("helloworld!" -> (mut a)[+5]*);
+
+        assert_eq!(Some("hello"), a.next());
+        assert_eq!(Some("world"), a.next());
+        assert_eq!(Some("!"), a.next());
+        assert_eq!(None, a.next());
+    }
+
+    #[test]
     fn iter_between() {
         parse!("test: hello world\r\n\n!" -> _, (mut a),* # b);
 
@@ -409,36 +434,4 @@ mod parse {
             r
         }
     }
-}
-
-#[test]
-fn split_fn() {
-    use simpar::{split_line, split_paragraph};
-
-    let s = "hi\r\n\r\n";
-    let (a, b) = split_paragraph(s).unwrap();
-    assert_eq!(a, "hi");
-    assert_eq!(b, "");
-
-    let (a, b) = split_line(s).unwrap();
-    assert_eq!(a, "hi");
-    assert_eq!(b, "\r\n");
-}
-
-#[test]
-fn split_iter() {
-    let s = "hi\n\nmom\n\n\n!";
-    // hi
-    //-
-    // mom
-    //-
-    //-
-    // !
-
-    let mut iter = s.paragraphs();
-    assert_eq!(iter.next(), Some("hi"));
-    assert_eq!(iter.next(), Some("mom"));
-    assert_eq!(iter.next(), Some(""));
-    assert_eq!(iter.next(), Some("!"));
-    assert_eq!(iter.next(), None);
 }

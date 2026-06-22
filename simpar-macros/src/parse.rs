@@ -1,7 +1,8 @@
 use proc_macro2::{Span, TokenStream, TokenTree};
 use quote::{ToTokens, quote};
 use syn::{
-    Expr, Ident, LitChar, LitStr, Token, Type, braced, bracketed, parenthesized, parse_macro_input,
+    Expr, Ident, LitChar, LitInt, LitStr, Token, Type, braced, bracketed, parenthesized,
+    parse_macro_input,
     token::{Brace, Bracket, Paren},
 };
 
@@ -100,6 +101,7 @@ enum Separator {
     Period(SplitPattern),
     LiteralStr(LitStr),
     LiteralChar(LitChar),
+    ByteOffset(LitInt),
 }
 
 macro_rules! parse_sep {
@@ -124,6 +126,11 @@ macro_rules! parse_sep {
             $sep = Separator::LiteralStr($input.parse::<LitStr>()?);
         } else if $input.peek(LitChar) {
             $sep = Separator::LiteralChar($input.parse::<LitChar>()?);
+        } else if $input.peek(Bracket) {
+            let inner;
+            bracketed!(inner in $input);
+            inner.parse::<Token![+]>()?;
+            $sep = Separator::ByteOffset(inner.parse::<LitInt>()?);
         } else {
             return Err($input.error("Expected separator (one of ,;#~. or string/char literal)!"));
         }
@@ -198,18 +205,21 @@ impl ToTokens for Match {
                     Separator::Paragraph => quote! {
                         let #ITER = simpar::ParagraphIterable::paragraphs(#RETURN_DATA);
                     },
-                    Separator::Multispace => {
-                        quote! {let #ITER = #RETURN_DATA.split(' ').filter(|s| !s.is_empty());}
-                    }
-                    Separator::Period(split_pattern) => {
-                        quote! {let #ITER = #RETURN_DATA.split(#split_pattern);}
-                    }
-                    Separator::LiteralStr(lit_str) => {
-                        quote! {let #ITER = #RETURN_DATA.split(#lit_str);}
-                    }
-                    Separator::LiteralChar(lit_char) => {
-                        quote! {let #ITER = #RETURN_DATA.split(#lit_char);}
-                    }
+                    Separator::Multispace => quote! {
+                        let #ITER = #RETURN_DATA.split(' ').filter(|s| !s.is_empty());
+                    },
+                    Separator::Period(split_pattern) => quote! {
+                        let #ITER = #RETURN_DATA.split(#split_pattern);
+                    },
+                    Separator::LiteralStr(lit_str) => quote! {
+                        let #ITER = #RETURN_DATA.split(#lit_str);
+                    },
+                    Separator::LiteralChar(lit_char) => quote! {
+                        let #ITER = #RETURN_DATA.split(#lit_char);
+                    },
+                    Separator::ByteOffset(lit_int) => quote! {
+                        let #ITER = #RETURN_DATA.as_bytes().chunks(#lit_int).map(|slice| str::from_utf8(slice).expect("Index outside char boundary!"));
+                    },
                 });
 
                 let col = collect.then_some(quote! {.collect::<Vec<_>>()});
@@ -274,6 +284,9 @@ impl ToTokens for MatchSeparator {
                         let j = #INPUT.find(#lit_char).expect("Did not find separator!");
                         (#RETURN_DATA, #INPUT) = #INPUT.split_at(j);
                         #INPUT = #INPUT.strip_prefix(#lit_char).unwrap();
+                    },
+                    Separator::ByteOffset(lit_int) => quote! {
+                        (#RETURN_DATA, #INPUT) = #INPUT.split_at(#lit_int);
                     },
                 };
                 tokens.extend(find_index);
