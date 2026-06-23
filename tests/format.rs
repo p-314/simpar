@@ -37,10 +37,6 @@ fn format_markdown(input: &str) -> String {
         result.push_str(line);
 
         if line.starts_with("```") {
-            dbg!(line);
-        }
-
-        if line.starts_with("```") {
             code_block = !code_block;
             if line == "```" {
                 if code_block {
@@ -70,6 +66,7 @@ fn readme_formatted() {
     let lib_doc = include_str!("../src/lib.rs");
     let formatted = format_markdown(lib_doc);
     
+    // run `cargo test readme_formatted -- --nocapture` to get the formatted docs
     println!("{}", formatted);
 
     assert_eq!(include_str!("../README.md"), formatted.as_str());

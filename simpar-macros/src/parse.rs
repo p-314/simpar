@@ -424,11 +424,16 @@ impl syn::parse::Parse for Format {
                 input.parse::<Token![*]>()?;
 
                 mat = Match::Rep(inner_format, sep, false);
-            } else if input.peek(Bracket) && input.peek3(Token![*]) {
-                // TODO: [+1] and [a],* can be confused; current implementation uses peek3 to look for *
-                // but should be improved
+            } else if input.peek(Bracket) {
                 let inner;
                 bracketed!(inner in input);
+
+                // handle [+i] seperator
+                if inner.peek(Token![+]) {
+                    inner.parse::<Token![+]>()?;
+                    format.push(MatchSeparator::Closed(Match::Blank, Separator::ByteOffset(inner.parse::<Expr>()?)));
+                    continue;
+                }
 
                 let Format(inner_format) = inner.parse::<Format>()?;
 
