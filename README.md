@@ -43,12 +43,12 @@ matches are:
 
 Supported separators are:
 
-|separator|symbol|splits at|example|
-|:---|:--:|----|:---|
+|separator|symbol|splits at|<div style="width:20em">example</div>|
+|----|:--:|----|----|
 | Space | `,` | whitespace (`' '`)  | `parse!("AA BBB" -> a, b)` |
 | Newline | `;` | newline (`'\n'` or `"\r\n"`)  | `parse!("AA\nBBB" -> a; b)` |
 | Paragraph | `#` | empty line | `parse!("AA\n\nBBB" -> a # b)` |
-| Multispace | `~` | one or more whitespaces (`' '`) | <code>parse!("AA&nbsp;&nbsp;&nbsp;&nbsp; BBB" -> a~ b</code> |
+| Multispace | `~` | one or more whitespaces (`' '`) | <code>parse!("AA&nbsp;&nbsp;&nbsp;&nbsp; BBB" -> a~ b)</code> |
 | Period | `.` | period (`'.'`) | `parse!("AA.BBB" -> a. b)` |
 | Literal | literal char or string | next occurrence of the literal | `parse!("AAxBBB" -> a "x" b)` |
 | ByteOffset | `[+i]` with an integer literal `i` or expression | byte index `i` | `parse!("AABBB" -> a [+2] b)` |
