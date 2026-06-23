@@ -1,7 +1,7 @@
 use proc_macro2::{Span, TokenStream, TokenTree};
 use quote::{ToTokens, quote};
 use syn::{
-    Expr, Ident, LitChar, LitInt, LitStr, Token, Type, braced, bracketed, parenthesized,
+    Expr, Ident, LitChar, LitStr, Token, Type, braced, bracketed, parenthesized,
     parse_macro_input,
     token::{Brace, Bracket, Paren},
 };
@@ -101,7 +101,7 @@ enum Separator {
     Period(SplitPattern),
     LiteralStr(LitStr),
     LiteralChar(LitChar),
-    ByteOffset(LitInt),
+    ByteOffset(Expr),
 }
 
 macro_rules! parse_sep {
@@ -130,7 +130,7 @@ macro_rules! parse_sep {
             let inner;
             bracketed!(inner in $input);
             inner.parse::<Token![+]>()?;
-            $sep = Separator::ByteOffset(inner.parse::<LitInt>()?);
+            $sep = Separator::ByteOffset(inner.parse::<Expr>()?);
         } else {
             return Err($input.error("Expected separator (one of ,;#~. or string/char literal)!"));
         }
@@ -198,9 +198,7 @@ impl ToTokens for Match {
 
                 // get iterator
                 tokens.extend(match separator {
-                    Separator::Space(split_pattern) => {
-                        quote! {let #ITER = #RETURN_DATA.split(#split_pattern);}
-                    }
+                    Separator::Space(split_pattern) => quote! {let #ITER = #RETURN_DATA.split(#split_pattern);},
                     Separator::Newline => quote! {let #ITER = #RETURN_DATA.lines();},
                     Separator::Paragraph => quote! {
                         let #ITER = simpar::ParagraphIterable::paragraphs(#RETURN_DATA);
@@ -251,7 +249,6 @@ impl ToTokens for MatchSeparator {
             },
             MatchSeparator::Closed(mat, separator) => {
                 tokens.extend(quote! {
-                    let __parse_macro_find_input = #INPUT;
                     let #RETURN_DATA;
                 });
 
@@ -427,7 +424,9 @@ impl syn::parse::Parse for Format {
                 input.parse::<Token![*]>()?;
 
                 mat = Match::Rep(inner_format, sep, false);
-            } else if input.peek(Bracket) {
+            } else if input.peek(Bracket) && input.peek3(Token![*]) {
+                // TODO: [+1] and [a],* can be confused; current implementation uses peek3 to look for *
+                // but should be improved
                 let inner;
                 bracketed!(inner in input);
 

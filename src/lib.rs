@@ -39,18 +39,17 @@
 //! - `(<pattern>)<sep>*` - repetition where `<sep>` can be any valid separator
 //! - `[<pattern>]<sep>*` - repetition collected into a `Vec`
 //!
-//!
 //! Supported separators are:
 //!
-//! |separator|symbol|splits at|programmable?|
-//! |:---|:--:|----|:--:|
-//! | Space | `,` | whitespace (`' '`) | **yes** |
-//! | Newline | `;` | newline (`'\n'` or `"\r\n"`) | no |
-//! | Paragraph | `#` | empty line | no |
-//! | Multispace | `~` | one or more whitespaces (`' '`) | no |
-//! | Period | `.` | period (`'.'`) | **yes** |
-//! | Literal | literal char or string | next occurrence of the literal | no |
-//! | ByteOffset | `[+i]` with an integer literal `i` | byte index `i` | no |
+//! |separator|symbol|splits at|example|
+//! |:---|:--:|----|:---|
+//! | Space | `,` | whitespace (`' '`)  | `parse!("AA BBB" -> a, b)` |
+//! | Newline | `;` | newline (`'\n'` or `"\r\n"`)  | `parse!("AA\nBBB" -> a; b)` |
+//! | Paragraph | `#` | empty line | `parse!("AA\n\nBBB" -> a # b)` |
+//! | Multispace | `~` | one or more whitespaces (`' '`) | <code>parse!("AA&nbsp;&nbsp;&nbsp;&nbsp; BBB" -> a~ b</code> |
+//! | Period | `.` | period (`'.'`) | `parse!("AA.BBB" -> a. b)` |
+//! | Literal | literal char or string | next occurrence of the literal | `parse!("AAxBBB" -> a "x" b)` |
+//! | ByteOffset | `[+i]` with an integer literal `i` or expression | byte index `i` | `parse!("AABBB" -> a [+2] b)` |
 //!
 //! ## Type Annotations
 //! By using `<var>: <type>` values are automatically converted using the `FromStr` trait.
@@ -113,13 +112,15 @@
 //! # use simpar::parse;
 //! # let file = r"country,capital,population,top-level domain
 //! # germany,Berlin,83497147,.de";
-//!
+//! #
 //! parse!(file -> _; {, = ','} country, capital, population: u64, tld);
 //! # assert_eq!(country, "germany");
 //! # assert_eq!(capital, "Berlin");
 //! # assert_eq!(population, 83497147);
 //! # assert_eq!(tld, ".de");
 //! ```
+//!
+//! Only the space (`,`) and period (`.`) seperator are programmable.
 
 use std::str::Lines;
 
@@ -152,7 +153,7 @@ pub fn split_line(s: &str) -> Option<(&str, &str)> {
 /// Splits a string at the first empty line.
 ///
 /// Returns the part before the empty line and the remainder (excluding the empty line)
-/// or `None` if the string does not contain an empty line.
+/// or `None` if the string does not contain an empty line. <code>a&nbsp;&nbsp;&nbsp;&nbsp; b</code>
 ///
 /// # Examples
 /// ```

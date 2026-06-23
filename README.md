@@ -4,7 +4,6 @@
 [![docs.rs](https://img.shields.io/docsrs/simpar)](https://docs.rs/simpar/latest/simpar/)
 ![Crates.io License](https://img.shields.io/crates/l/simpar)
 
-
 A simple declarative string parser using string operations from the standard library.
 
 The [`parse!`](https://docs.rs/simpar/latest/simpar/macro.parse.html) macro allows you to extract variables from strings based on specified
@@ -27,26 +26,32 @@ assert_eq!((day, month, year), ("1", "1", "1970"));
 
 
 ## Pattern Syntax Reference
-A pattern consists of matches (usually identifiers) followed by separators. Valid 
+The `parse!` macro takes input (e.g. a string or identifier) and a pattern:
+
+```rust
+parse!(input -> pattern);
+```
+
+A pattern consists of matches (usually identifiers) followed by separators. Valid
 matches are:
 
 - `<var>` - capture as string slice and assign it to `<var>`
 - `<var>: <type>` - capture and convert to type
 - `_` - blank (skip)
-- `(<pattern>)*<sep>` - repetition where `<sep>` can be any valid separator
-- `[<pattern>]*<sep>` - repetition collected into a `Vec`
-
+- `(<pattern>)<sep>*` - repetition where `<sep>` can be any valid separator
+- `[<pattern>]<sep>*` - repetition collected into a `Vec`
 
 Supported separators are:
 
-|separator|symbol|splits at|programmable?|
-|:---|:--:|----|:--:|
-| Space | `,` | whitespace (`' '`) | **yes** |
-| Newline | `;` | newline (`'\n'` or `"\r\n"`) | no |
-| Paragraph | `#` | empty lines | no |
-| Multispace | `~` | one or more whitespaces (`' '`) | no |
-| Period | `.` | period (`'.'`) | **yes** |
-| Literal | `".."` or `'..'` | next occurrence of the literal | no |
+|separator|symbol|splits at|example|
+|:---|:--:|----|:---|
+| Space | `,` | whitespace (`' '`)  | `parse!("AA BBB" -> a, b)` |
+| Newline | `;` | newline (`'\n'` or `"\r\n"`)  | `parse!("AA\nBBB" -> a; b)` |
+| Paragraph | `#` | empty line | `parse!("AA\n\nBBB" -> a # b)` |
+| Multispace | `~` | one or more whitespaces (`' '`) | <code>parse!("AA&nbsp;&nbsp;&nbsp;&nbsp; BBB" -> a~ b</code> |
+| Period | `.` | period (`'.'`) | `parse!("AA.BBB" -> a. b)` |
+| Literal | literal char or string | next occurrence of the literal | `parse!("AAxBBB" -> a "x" b)` |
+| ByteOffset | `[+i]` with an integer literal `i` or expression | byte index `i` | `parse!("AABBB" -> a [+2] b)` |
 
 ## Type Annotations
 By using `<var>: <type>` values are automatically converted using the `FromStr` trait.
@@ -63,12 +68,12 @@ assert_eq!(ratio, Ok(3.14));
 
 ## Repetitions
 
-Repeating patterns can be extracted using `(<pattern>)*<separator>`:
+Repeating patterns can be extracted using `(<pattern>)<separator>*`:
 
 ```rust
 use simpar::parse;
 
-parse!("1 2 3 4" -> (mut n: i32)*,);
+parse!("1 2 3 4" -> (mut n: i32),*);
 
 assert_eq!(n.next(), Some(1));
 assert_eq!(n.next(), Some(2));
@@ -78,13 +83,13 @@ assert_eq!(n.next(), None);
 ```
 
 Repetitions return iterators, but can be directly collected into vectors using
-the `[<pattern>]*<separator>` syntax.
+the `[<pattern>]<separator>*` syntax.
 
 
 ```rust
 use simpar::parse;
 
-parse!("1 2 3 4" -> [n: i32]*,);
+parse!("1 2 3 4" -> [n: i32],*);
 
 assert_eq!(n, vec![1, 2, 3, 4]);
 ```
@@ -92,8 +97,8 @@ assert_eq!(n, vec![1, 2, 3, 4]);
 At the moment repetitions can contain at most one identifier.
 
 ## Programmable separators
-Some separators can be modified. `{<separator> = <pattern>}` sets the separator to `<pattern>`
-where `<pattern>` can be anything that implements the standard library `Pattern` trait, 
+Some separators can be modified. `{<separator> = <pattern>}` sets the sperator to `<pattern>`
+where `<pattern>` can be anything that implements the standard library `Pattern` trait,
 e.g. a string or char.
 
 For example, if `file` is the content of a CSV file like
@@ -108,6 +113,8 @@ then parsing can be done with:
 ```rust
 parse!(file -> _; {, = ','} country, capital, population: u64, tld);
 ```
+
+Only the space (`,`) and period (`.`) seperator are programmable.
 
 # License
 Simpar is distributed under the terms of both the MIT license and the

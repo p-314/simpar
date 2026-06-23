@@ -145,6 +145,17 @@ mod sep {
         assert_eq!(" ", b);
         assert_eq!("world!", c);
     }
+    
+    #[test]
+    fn byte_offset_expr() {
+        let i = 5;
+        let f = |x: usize| x * 100 - 99;
+        parse!("hello world!" -> a [+i] b [+f(1)] c);
+
+        assert_eq!("hello", a);
+        assert_eq!(" ", b);
+        assert_eq!("world!", c);
+    }
 
     #[test]
     #[should_panic]
@@ -257,7 +268,9 @@ mod programmable {
 }
 
 mod iter {
-    use simpar::parse;
+    use std::any::{type_name, type_name_of_val};
+
+use simpar::parse;
 
     #[test]
     fn iter_space() {
@@ -375,8 +388,15 @@ mod iter {
     fn iter_collect() {
         parse!("hello world !" -> [a],*);
 
-        let b: Vec<&str> = a;
-        assert_eq!(vec!["hello", "world", "!"], b);
+        assert_eq!(type_name_of_val(&a), type_name::<Vec<&str>>());
+        assert_eq!(vec!["hello", "world", "!"], a);
+    }
+
+    #[test]
+    fn iter_collect_byte_offset() {
+        parse!("hello world !" -> [a][+5]*);
+
+        assert_eq!(vec!["hello", " worl", "d !"], a);
     }
 }
 
