@@ -65,9 +65,27 @@ fn format_markdown(input: &str) -> String {
 fn readme_formatted() {
     let lib_doc = include_str!("../src/lib.rs");
     let formatted = format_markdown(lib_doc);
-    
+
     // run `cargo test readme_formatted -- --nocapture` to get the formatted docs
     println!("{}", formatted);
 
-    assert_eq!(include_str!("../README.md"), formatted.as_str());
+    let readme = include_str!("../README.md");
+
+    if formatted != readme {
+        let i = formatted
+            .chars()
+            .zip(readme.chars())
+            .enumerate()
+            .find_map(|(i, (c1, c2))| (c1 != c2).then_some(i));
+        if let Some(i) = i {
+            panic!(
+                "Difference at index {}:\n\tREADME: \t\"{}...\"\n\tformatted: \t\"{}...\"",
+                i,
+                &readme[i..(i + 10).min(readme.len())],
+                &formatted[i..(i + 10).min(formatted.len())]
+            );
+        } else {
+            panic!("Difference in length.");
+        }
+    }
 }
