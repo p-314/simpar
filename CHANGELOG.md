@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/p-314/simpar/compare/simpar-v0.1.3...simpar-v0.2.0) - 2026-06-25
+
+### Added
+
+- added byte offset seperator
+- [**breaking**] rewrote paragraph iterator and added more tests
+- [**breaking**] changed the order of <sep> and * in repetitions to be more in line with macro_rules! syntax
+
+### Fixed
+
+- fixed some docs
+- updated README
+- fixed ParagraphIter bug when having multiple consecutive empty lines
+
 ## [0.1.3](https://github.com/p-314/simpar/compare/simpar-v0.1.2...simpar-v0.1.3) - 2026-06-12
 
 ### Fixed
