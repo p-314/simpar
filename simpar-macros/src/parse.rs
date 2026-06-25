@@ -100,6 +100,7 @@ enum Separator {
     Period(SplitPattern),
     LiteralStr(LitStr),
     LiteralChar(LitChar),
+    ByteOffset(Expr),
 }
 
 macro_rules! parse_sep {
@@ -124,6 +125,11 @@ macro_rules! parse_sep {
             $sep = Separator::LiteralStr($input.parse::<LitStr>()?);
         } else if $input.peek(LitChar) {
             $sep = Separator::LiteralChar($input.parse::<LitChar>()?);
+        } else if $input.peek(Bracket) {
+            let inner;
+            bracketed!(inner in $input);
+            inner.parse::<Token![+]>()?;
+            $sep = Separator::ByteOffset(inner.parse::<Expr>()?);
         } else {
             return Err($input.error("Expected separator (one of ,;#~. or string/char literal)!"));
         }
@@ -191,25 +197,26 @@ impl ToTokens for Match {
 
                 // get iterator
                 tokens.extend(match separator {
-                    Separator::Space(split_pattern) => {
-                        quote! {let #ITER = #RETURN_DATA.split(#split_pattern);}
-                    }
+                    Separator::Space(split_pattern) => quote! {let #ITER = #RETURN_DATA.split(#split_pattern);},
                     Separator::Newline => quote! {let #ITER = #RETURN_DATA.lines();},
                     Separator::Paragraph => quote! {
                         let #ITER = simpar::ParagraphIterable::paragraphs(#RETURN_DATA);
                     },
-                    Separator::Multispace => {
-                        quote! {let #ITER = #RETURN_DATA.split(' ').filter(|s| !s.is_empty());}
-                    }
-                    Separator::Period(split_pattern) => {
-                        quote! {let #ITER = #RETURN_DATA.split(#split_pattern);}
-                    }
-                    Separator::LiteralStr(lit_str) => {
-                        quote! {let #ITER = #RETURN_DATA.split(#lit_str);}
-                    }
-                    Separator::LiteralChar(lit_char) => {
-                        quote! {let #ITER = #RETURN_DATA.split(#lit_char);}
-                    }
+                    Separator::Multispace => quote! {
+                        let #ITER = #RETURN_DATA.split(' ').filter(|s| !s.is_empty());
+                    },
+                    Separator::Period(split_pattern) => quote! {
+                        let #ITER = #RETURN_DATA.split(#split_pattern);
+                    },
+                    Separator::LiteralStr(lit_str) => quote! {
+                        let #ITER = #RETURN_DATA.split(#lit_str);
+                    },
+                    Separator::LiteralChar(lit_char) => quote! {
+                        let #ITER = #RETURN_DATA.split(#lit_char);
+                    },
+                    Separator::ByteOffset(lit_int) => quote! {
+                        let #ITER = #RETURN_DATA.as_bytes().chunks(#lit_int).map(|slice| str::from_utf8(slice).expect("Index outside char boundary!"));
+                    },
                 });
 
                 let col = collect.then_some(quote! {.collect::<Vec<_>>()});
@@ -241,7 +248,6 @@ impl ToTokens for MatchSeparator {
             },
             MatchSeparator::Closed(mat, separator) => {
                 tokens.extend(quote! {
-                    let __parse_macro_find_input = #INPUT;
                     let #RETURN_DATA;
                 });
 
@@ -274,6 +280,9 @@ impl ToTokens for MatchSeparator {
                         let j = #INPUT.find(#lit_char).expect("Did not find separator!");
                         (#RETURN_DATA, #INPUT) = #INPUT.split_at(j);
                         #INPUT = #INPUT.strip_prefix(#lit_char).unwrap();
+                    },
+                    Separator::ByteOffset(lit_int) => quote! {
+                        (#RETURN_DATA, #INPUT) = #INPUT.split_at(#lit_int);
                     },
                 };
                 tokens.extend(find_index);
@@ -410,19 +419,29 @@ impl syn::parse::Parse for Format {
                 let Format(inner_format) = inner.parse::<Format>()?;
 
                 // get rep separator
-                input.parse::<Token![*]>()?;
                 parse_sep!(format, input, sep);
+                input.parse::<Token![*]>()?;
 
                 mat = Match::Rep(inner_format, sep, false);
             } else if input.peek(Bracket) {
                 let inner;
                 bracketed!(inner in input);
 
+                // handle [+i] seperator
+                if inner.peek(Token![+]) {
+                    inner.parse::<Token![+]>()?;
+                    format.push(MatchSeparator::Closed(
+                        Match::Blank,
+                        Separator::ByteOffset(inner.parse::<Expr>()?),
+                    ));
+                    continue;
+                }
+
                 let Format(inner_format) = inner.parse::<Format>()?;
 
                 // get rep separator
-                input.parse::<Token![*]>()?;
                 parse_sep!(format, input, sep);
+                input.parse::<Token![*]>()?;
 
                 mat = Match::Rep(inner_format, sep, true);
             } else if input.peek(Brace) {

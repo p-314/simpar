@@ -138,6 +138,26 @@ mod sep {
     }
 
     #[test]
+    fn byte_offset() {
+        parse!("hello world!" -> a [+5] b [+1] c);
+
+        assert_eq!("hello", a);
+        assert_eq!(" ", b);
+        assert_eq!("world!", c);
+    }
+
+    #[test]
+    fn byte_offset_expr() {
+        let i = 5;
+        let f = |x: usize| x * 100 - 99;
+        parse!("hello world!" -> a [+i] b [+f(1)] c);
+
+        assert_eq!("hello", a);
+        assert_eq!(" ", b);
+        assert_eq!("world!", c);
+    }
+
+    #[test]
     #[should_panic]
     fn too_many_ident() {
         parse!("hello world" -> _a, _b, _c);
@@ -171,6 +191,12 @@ mod sep {
     #[should_panic]
     fn missing_literal() {
         parse!("hello world" -> _ "test" _);
+    }
+
+    #[test]
+    #[should_panic]
+    fn byte_offset_overflow() {
+        parse!("hi" -> _ [+3]);
     }
 
     #[test]
@@ -232,7 +258,7 @@ mod programmable {
 
     #[test]
     fn change_iter() {
-        parse!("1,2,3" -> {, = ','} (mut a: u8)*,);
+        parse!("1,2,3" -> {, = ','} (mut a: u8),*);
 
         assert_eq!(Some(1), a.next());
         assert_eq!(Some(2), a.next());
@@ -242,11 +268,13 @@ mod programmable {
 }
 
 mod iter {
+    use std::any::{type_name, type_name_of_val};
+
     use simpar::parse;
 
     #[test]
     fn iter_space() {
-        parse!("hello world !" -> (mut a)*,);
+        parse!("hello world !" -> (mut a),*);
 
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
@@ -256,7 +284,7 @@ mod iter {
 
     #[test]
     fn iter_newline() {
-        parse!("hello\nworld\r\n!" -> (mut a)*;);
+        parse!("hello\nworld\r\n!" -> (mut a);*);
 
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
@@ -266,7 +294,7 @@ mod iter {
 
     #[test]
     fn iter_multispace() {
-        parse!("hello       world    !" -> (mut a)*~);
+        parse!("hello       world    !" -> (mut a)~*);
 
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
@@ -276,7 +304,7 @@ mod iter {
 
     #[test]
     fn iter_paragraphs() {
-        parse!("hello\n\nworld\r\n\n!" -> (mut a)*#);
+        parse!("hello\n\nworld\r\n\n!" -> (mut a)#*);
 
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
@@ -286,7 +314,7 @@ mod iter {
 
     #[test]
     fn iter_period() {
-        parse!("hello.world.!" -> (mut a)*.);
+        parse!("hello.world.!" -> (mut a).*);
 
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
@@ -296,7 +324,7 @@ mod iter {
 
     #[test]
     fn iter_literal_str() {
-        parse!("hello123world123!" -> (mut a)*"123");
+        parse!("hello123world123!" -> (mut a)"123"*);
 
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
@@ -306,7 +334,17 @@ mod iter {
 
     #[test]
     fn iter_literal_char() {
-        parse!("hello1world1!" -> (mut a)*'1');
+        parse!("hello1world1!" -> (mut a)'1'*);
+
+        assert_eq!(Some("hello"), a.next());
+        assert_eq!(Some("world"), a.next());
+        assert_eq!(Some("!"), a.next());
+        assert_eq!(None, a.next());
+    }
+
+    #[test]
+    fn iter_byte_offset() {
+        parse!("helloworld!" -> (mut a)[+5]*);
 
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
@@ -316,7 +354,7 @@ mod iter {
 
     #[test]
     fn iter_between() {
-        parse!("test: hello world\r\n\n!" -> _, (mut a)*,# b);
+        parse!("test: hello world\r\n\n!" -> _, (mut a),* # b);
 
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
@@ -326,12 +364,12 @@ mod iter {
 
     #[test]
     fn iter_zero_ident() {
-        parse!("hello world" -> (_)*,);
+        parse!("hello world" -> (_),*);
     }
 
     #[test]
     fn iter_inside() {
-        parse!("Hello world\r\n\n! !" -> (_, mut a)*#);
+        parse!("Hello world\r\n\n! !" -> (_, mut a)#*);
 
         assert_eq!(Some("world"), a.next());
         assert_eq!(Some("!"), a.next());
@@ -340,7 +378,7 @@ mod iter {
 
     #[test]
     fn iter_iter() {
-        parse!("hello world\n1 2 3" -> ((a)*,)*;);
+        parse!("hello world\n1 2 3" -> ((a),*);*);
 
         let owned = a.map(|line| line.collect::<Vec<_>>()).collect::<Vec<_>>();
         assert_eq!(vec![vec!["hello", "world"], vec!["1", "2", "3"]], owned);
@@ -348,10 +386,25 @@ mod iter {
 
     #[test]
     fn iter_collect() {
-        parse!("hello world !" -> [a]*,);
+        parse!("hello world !" -> [a],*);
 
-        let b: Vec<&str> = a;
-        assert_eq!(vec!["hello", "world", "!"], b);
+        assert_eq!(type_name_of_val(&a), type_name::<Vec<&str>>());
+        assert_eq!(vec!["hello", "world", "!"], a);
+    }
+
+    #[test]
+    fn iter_collect_byte_offset() {
+        parse!("hello world !" -> [a][+5]*);
+
+        assert_eq!(vec!["hello", " worl", "d !"], a);
+    }
+
+    #[test]
+    #[should_panic]
+    fn iter_collect_panic_zero_ident() {
+        // parsing should fail, because the last item is too short to split at index 2
+        // using just ([+2])*, would not fail, bacause the iterator is not consumed
+        parse!("aa bb c" -> [[+2]],*);
     }
 }
 
@@ -367,7 +420,7 @@ mod parse {
 
     #[test]
     fn iter_parse() {
-        parse!("1 2 3" -> (mut a: u16)*,);
+        parse!("1 2 3" -> (mut a: u16),*);
 
         assert_eq!(Some(1u16), a.next());
         assert_eq!(Some(2u16), a.next());
@@ -409,18 +462,4 @@ mod parse {
             r
         }
     }
-}
-
-#[test]
-fn split_fn() {
-    use simpar::{split_line, split_paragraph};
-
-    let s = "hi\r\n\r\n";
-    let (a, b) = split_paragraph(s).unwrap();
-    assert_eq!(a, "hi");
-    assert_eq!(b, "");
-
-    let (a, b) = split_line(s).unwrap();
-    assert_eq!(a, "hi");
-    assert_eq!(b, "\r\n");
 }

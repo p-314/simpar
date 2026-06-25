@@ -1,7 +1,7 @@
 use simpar::parse;
 
 fn parse(input: &str) -> (impl Iterator<Item = (u64, u64)>, impl Iterator<Item = u64>) {
-    parse!(input -> (id_ranges)*; # (ids: u64)*;);
+    parse!(input -> (id_ranges);* # (ids: u64);*);
     let id_ranges = id_ranges.map(|line| {
         parse!(line -> left: u64 "-" right: u64);
         (left, right)
