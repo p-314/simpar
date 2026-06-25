@@ -14,32 +14,26 @@ use proc_macro::TokenStream;
 
 /// Declarative string parser macro.
 ///
-/// The `parse!` macro takes input (string or identifier) and a pattern:
+/// A pattern consists of matches (usually identifiers) followed by separators. Valid
+/// matches are:
 ///
-/// ```
-/// # use simpar_macros::parse;
-/// # let input = "";
-/// parse!(input -> pattern)
-/// ```
-/// A pattern consists of matches (usually identifiers) followed by separators.
-///
-/// Match syntax:
 /// - `<var>` - capture as string slice and assign it to `<var>`
 /// - `<var>: <type>` - capture and convert to type
 /// - `_` - blank (skip)
-/// - `(<pattern>)*<sep>` - repetition where `<sep>` can be any valid separator
-/// - `[<pattern>]*<sep>` - repetition collected into a `Vec`
+/// - `(<pattern>)<sep>*` - repetition where `<sep>` can be any valid separator
+/// - `[<pattern>]<sep>*` - repetition collected into a `Vec`
 ///
-/// Separator Syntax:
+/// Supported separators are:
 ///
-/// |separator|symbol|splits at|programmable?|
-/// |:---|:--:|----|:--:|
-/// | Space | `,` | whitespace (`' '`) | **yes** |
-/// | Newline | `;` | newline (`'\n'` or `"\r\n"`) | no |
-/// | Paragraph | `#` | empty lines | no |
-/// | Multispace | `~` | one or more whitespaces (`' '`) | no |
-/// | Period | `.` | period (`'.'`) | **yes** |
-/// | Literal | `".."` or `'..'` | next occurrence of the literal | no |
+/// |separator|symbol|splits at|<div style="width:20em">example</div>|
+/// |----|:--:|----|----|
+/// | Space | `,` | whitespace (`' '`)  | `parse!("AA BBB" -> a, b)` |
+/// | Newline | `;` | newline (`'\n'` or `"\r\n"`)  | `parse!("AA\nBBB" -> a; b)` |
+/// | Paragraph | `#` | empty line | `parse!("AA\n\nBBB" -> a # b)` |
+/// | Multispace | `~` | one or more consecutive whitespaces (`' '`) | <code>parse!("AA&nbsp;&nbsp;&nbsp;&nbsp; BBB" -> a~ b)</code> |
+/// | Period | `.` | period (`'.'`) | `parse!("AA.BBB" -> a. b)` |
+/// | Literal | literal char or string | next occurrence of the literal | `parse!("AAxBBB" -> a "x" b)` |
+/// | ByteOffset | `[+i]` with an integer literal `i` or expression | byte index `i` | `parse!("AABBB" -> a [+2] b)` |
 ///
 /// ## Examples
 ///
@@ -50,12 +44,14 @@ use proc_macro::TokenStream;
 /// assert_eq!("Alice", name);
 /// assert_eq!(30, age);
 ///
-/// parse!("1 2 3" -> (mut n: i32)*,);
+/// parse!("1 2 3" -> (mut n: i32),*);
 /// assert_eq!(Some(1), n.next());
 /// assert_eq!(Some(2), n.next());
 /// assert_eq!(Some(3), n.next());
 /// assert_eq!(None, n.next());
 /// ```
+///
+/// For more information, please see the [crate-level documentation](https://docs.rs/simpar/latest/simpar/).
 #[proc_macro]
 pub fn parse(item: TokenStream) -> TokenStream {
     parse_impl(item)

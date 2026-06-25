@@ -1,13 +1,8 @@
 use simpar::parse;
 
-fn parse(
-    input: &str,
-) -> (
-    Vec<usize>,
-    impl Iterator<Item = Vec<(usize, usize, usize)>>,
-) {
+fn parse(input: &str) -> (Vec<usize>, impl Iterator<Item = Vec<(usize, usize, usize)>>) {
     parse!(input -> _, [seeds: usize],* # (_; (maps);*)#*);
-    
+
     let maps = maps.map(|m| {
         m.map(|line| {
             parse!(line -> destination: usize, source: usize, length: usize);

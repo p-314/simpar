@@ -1,8 +1,7 @@
 use proc_macro2::{Span, TokenStream, TokenTree};
 use quote::{ToTokens, quote};
 use syn::{
-    Expr, Ident, LitChar, LitStr, Token, Type, braced, bracketed, parenthesized,
-    parse_macro_input,
+    Expr, Ident, LitChar, LitStr, Token, Type, braced, bracketed, parenthesized, parse_macro_input,
     token::{Brace, Bracket, Paren},
 };
 
@@ -431,7 +430,10 @@ impl syn::parse::Parse for Format {
                 // handle [+i] seperator
                 if inner.peek(Token![+]) {
                     inner.parse::<Token![+]>()?;
-                    format.push(MatchSeparator::Closed(Match::Blank, Separator::ByteOffset(inner.parse::<Expr>()?)));
+                    format.push(MatchSeparator::Closed(
+                        Match::Blank,
+                        Separator::ByteOffset(inner.parse::<Expr>()?),
+                    ));
                     continue;
                 }
 

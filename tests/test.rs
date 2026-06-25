@@ -145,7 +145,7 @@ mod sep {
         assert_eq!(" ", b);
         assert_eq!("world!", c);
     }
-    
+
     #[test]
     fn byte_offset_expr() {
         let i = 5;
@@ -270,7 +270,7 @@ mod programmable {
 mod iter {
     use std::any::{type_name, type_name_of_val};
 
-use simpar::parse;
+    use simpar::parse;
 
     #[test]
     fn iter_space() {
@@ -397,6 +397,14 @@ use simpar::parse;
         parse!("hello world !" -> [a][+5]*);
 
         assert_eq!(vec!["hello", " worl", "d !"], a);
+    }
+
+    #[test]
+    #[should_panic]
+    fn iter_collect_panic_zero_ident() {
+        // parsing should fail, because the last item is too short to split at index 2
+        // using just ([+2])*, would not fail, bacause the iterator is not consumed
+        parse!("aa bb c" -> [[+2]],*);
     }
 }
 
