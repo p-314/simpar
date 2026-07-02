@@ -30,7 +30,6 @@ use proc_macro::TokenStream;
 /// | Space | `,` | whitespace (`' '`)  | `parse!("AA BBB" -> a, b)` |
 /// | Newline | `;` | newline (`'\n'` or `"\r\n"`)  | `parse!("AA\nBBB" -> a; b)` |
 /// | Paragraph | `#` | empty line | `parse!("AA\n\nBBB" -> a # b)` |
-/// | Multispace | `~` | one or more consecutive whitespaces (`' '`) | <code>parse!("AA&nbsp;&nbsp;&nbsp;&nbsp; BBB" -> a~ b)</code> |
 /// | Period | `.` | period (`'.'`) | `parse!("AA.BBB" -> a. b)` |
 /// | Literal | literal char or string | next occurrence of the literal | `parse!("AAxBBB" -> a "x" b)` |
 /// | ByteOffset | `[+i]` with an integer literal `i` or expression | byte index `i` | `parse!("AABBB" -> a [+2] b)` |

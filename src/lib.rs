@@ -46,7 +46,6 @@
 //! | Space | `,` | whitespace (`' '`)  | `parse!("AA BBB" -> a, b)` |
 //! | Newline | `;` | newline (`'\n'` or `"\r\n"`)  | `parse!("AA\nBBB" -> a; b)` |
 //! | Paragraph | `#` | empty line | `parse!("AA\n\nBBB" -> a # b)` |
-//! | Multispace | `~` | one or more consecutive whitespaces (`' '`) | <code>parse!("AA&nbsp;&nbsp;&nbsp;&nbsp; BBB" -> a~ b)</code> |
 //! | Period | `.` | period (`'.'`) | `parse!("AA.BBB" -> a. b)` |
 //! | Literal | literal char or string | next occurrence of the literal | `parse!("AAxBBB" -> a "x" b)` |
 //! | ByteOffset | `[+i]` with an integer literal `i` or expression | byte index `i` | `parse!("AABBB" -> a [+2] b)` |
@@ -65,7 +64,6 @@
 //! ```
 //!
 //! ## Repetitions
-//!
 //! Repeating patterns can be extracted using `(<pattern>)<separator>*`:
 //!
 //! ```
@@ -121,10 +119,35 @@
 //! ```
 //!
 //! Only the space (`,`) and period (`.`) seperator are programmable.
+//!
+//! ## Condensing
+//! By default every separator splits exactly once. Using `<separator>~` changes thar behavior to
+//! return the first remainder that is not empty.
+//!
+//! For example `,~` splits the input at consecutive spaces.
+//!
+//! ```
+//! # use simpar::parse;
+//! parse!("long      pause" -> x,~ y);
+//!
+//! assert_eq!(x, "long");
+//! assert_eq!(y, "pause");
+//! ```
+
+pub use simpar_macros::parse;
 
 use std::str::Lines;
 
-pub use simpar_macros::parse;
+/// Extend a subslice to the right.
+///
+/// # Panics
+/// Panics if `subslice` is not a subslice of `source`.
+pub fn subslice_extend_right<'a>(subslice: &str, source: &'a str) -> &'a str {
+    let source_ptr = source.as_ptr() as usize;
+    let subslice_ptr = subslice.as_ptr() as usize;
+
+    &source[subslice_ptr.checked_sub(source_ptr).unwrap()..]
+}
 
 /// Splits a string at the first newline.
 ///
@@ -355,7 +378,7 @@ mod test {
 
     #[test]
     fn paragraph_iter_terminator() {
-        // `s` ends with two empty lines, but the last one ends acts as terminator
+        // `s` ends with two empty lines, but the last one acts as terminator
         // -> only one empty paragraph is returned
         let s = "test\n\n\n";
         // test

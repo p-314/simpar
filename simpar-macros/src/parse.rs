@@ -22,6 +22,7 @@ impl ToTokens for IdentHelper {
 const INPUT: IdentHelper = new_ident!("input");
 const RETURN_DATA: IdentHelper = new_ident!("return_data");
 const ITER: IdentHelper = new_ident!("iter");
+const CONDENSE_NON_EMPTY: IdentHelper = new_ident!("condense_non_empty");
 
 /// Variable type for identifiers in return positions
 #[derive(Clone)]
@@ -72,10 +73,10 @@ impl SplitPattern {
 
         let sep = if inner.peek(Token![.]) {
             inner.parse::<Token![.]>()?;
-            Separator::Period
+            SeparatorPattern::Period
         } else if inner.peek(Token![,]) {
             inner.parse::<Token![,]>()?;
-            Separator::Space
+            SeparatorPattern::Space
         } else {
             return Err(input.error("Expected programmable separator (, or .)!"));
         };
@@ -91,11 +92,16 @@ impl SplitPattern {
 }
 
 #[derive(Clone)]
-enum Separator {
+struct Separator {
+    pat: SeparatorPattern,
+    condensed: bool,
+}
+
+#[derive(Clone)]
+enum SeparatorPattern {
     Space(SplitPattern),
     Newline,
     Paragraph,
-    Multispace,
     Period(SplitPattern),
     LiteralStr(LitStr),
     LiteralChar(LitChar),
@@ -107,37 +113,42 @@ impl Separator {
         format_context: &[MatchSeparator],
         input: syn::parse::ParseStream,
     ) -> syn::Result<Self> {
-        let sep;
+        let pat;
         if input.peek(Token![,]) {
-            sep = Format::last_sep_space(format_context);
+            pat = Format::last_sep_space(format_context);
             input.parse::<Token![,]>()?;
         } else if input.peek(Token![;]) {
-            sep = Separator::Newline;
+            pat = SeparatorPattern::Newline;
             input.parse::<Token![;]>()?;
         } else if input.peek(Token![#]) {
-            sep = Separator::Paragraph;
+            pat = SeparatorPattern::Paragraph;
             input.parse::<Token![#]>()?;
-        } else if input.peek(Token![~]) {
-            sep = Separator::Multispace;
-            input.parse::<Token![~]>()?;
         } else if input.peek(Token![.]) {
-            sep = Format::last_sep_period(format_context);
+            pat = Format::last_sep_period(format_context);
             input.parse::<Token![.]>()?;
         } else if input.peek(LitStr) {
-            sep = Separator::LiteralStr(input.parse::<LitStr>()?);
+            pat = SeparatorPattern::LiteralStr(input.parse::<LitStr>()?);
         } else if input.peek(LitChar) {
-            sep = Separator::LiteralChar(input.parse::<LitChar>()?);
+            pat = SeparatorPattern::LiteralChar(input.parse::<LitChar>()?);
         } else if input.peek(Bracket) {
             let inner;
             bracketed!(inner in input);
             inner.parse::<Token![+]>()?;
-            sep = Separator::ByteOffset(inner.parse::<Expr>()?);
+            pat = SeparatorPattern::ByteOffset(inner.parse::<Expr>()?);
         } else {
             return Err(
                 input.error("Expected separator (one of ,;#~.[+i] or string/char literal)!")
             );
         }
-        Ok(sep)
+
+        let condensed = if input.peek(Token![~]) {
+            input.parse::<Token![~]>()?;
+            true
+        } else {
+            false
+        };
+
+        Ok(Separator { pat, condensed })
     }
 }
 
@@ -199,26 +210,29 @@ impl ToTokens for Match {
                 let decl = var.as_ref().map(|id| quote! {let #id;});
                 let assign = var.as_ref().map_or(quote! {let _}, |id| quote! {#id});
 
+                let condense = separator
+                    .condensed
+                    .then_some(quote! {.filter(|s| !s.is_empty())});
+
                 // get iterator
-                tokens.extend(match separator {
-                    Separator::Space(split_pattern) => quote! {let #ITER = #RETURN_DATA.split(#split_pattern);},
-                    Separator::Newline => quote! {let #ITER = #RETURN_DATA.lines();},
-                    Separator::Paragraph => quote! {
-                        let #ITER = simpar::ParagraphIterable::paragraphs(#RETURN_DATA);
+                tokens.extend(match &separator.pat {
+                    SeparatorPattern::Space(split_pattern) => quote! {
+                        let #ITER = #RETURN_DATA.split(#split_pattern)#condense;
                     },
-                    Separator::Multispace => quote! {
-                        let #ITER = #RETURN_DATA.split(' ').filter(|s| !s.is_empty());
+                    SeparatorPattern::Newline => quote! {let #ITER = #RETURN_DATA.lines()#condense;},
+                    SeparatorPattern::Paragraph => quote! {
+                        let #ITER = simpar::ParagraphIterable::paragraphs(#RETURN_DATA)#condense;
                     },
-                    Separator::Period(split_pattern) => quote! {
-                        let #ITER = #RETURN_DATA.split(#split_pattern);
+                    SeparatorPattern::Period(split_pattern) => quote! {
+                        let #ITER = #RETURN_DATA.split(#split_pattern)#condense;
                     },
-                    Separator::LiteralStr(lit_str) => quote! {
-                        let #ITER = #RETURN_DATA.split(#lit_str);
+                    SeparatorPattern::LiteralStr(lit_str) => quote! {
+                        let #ITER = #RETURN_DATA.split(#lit_str)#condense;
                     },
-                    Separator::LiteralChar(lit_char) => quote! {
-                        let #ITER = #RETURN_DATA.split(#lit_char);
+                    SeparatorPattern::LiteralChar(lit_char) => quote! {
+                        let #ITER = #RETURN_DATA.split(#lit_char)#condense;
                     },
-                    Separator::ByteOffset(lit_int) => quote! {
+                    SeparatorPattern::ByteOffset(lit_int) => quote! {
                         let #ITER = #RETURN_DATA.as_bytes().chunks(#lit_int).map(|slice| str::from_utf8(slice).expect("Index outside char boundary!"));
                     },
                 });
@@ -240,7 +254,7 @@ enum MatchSeparator {
     Open(Match),
     Closed(Match, Separator),
     // separator change
-    Chg(Separator),
+    Chg(SeparatorPattern),
 }
 
 impl ToTokens for MatchSeparator {
@@ -255,41 +269,72 @@ impl ToTokens for MatchSeparator {
                     let #RETURN_DATA;
                 });
 
-                let find_index = match separator {
-                    Separator::Space(split_pattern) => quote! {
+                let find_index = match &separator.pat {
+                    SeparatorPattern::Space(split_pattern) => quote! {
                         let j = #INPUT.find(#split_pattern).expect("Did not find separator!");
                         (#RETURN_DATA, #INPUT) = #INPUT.split_at(j);
                         #INPUT = #INPUT.strip_prefix(#split_pattern).unwrap();
                     },
-                    Separator::Multispace => quote! {
-                        (#RETURN_DATA, #INPUT) = simpar::split_multispace(#INPUT).expect("Expected space (' ')!");
-                    },
-                    Separator::Newline => quote! {
+                    SeparatorPattern::Newline => quote! {
                         (#RETURN_DATA, #INPUT) = simpar::split_line(#INPUT).expect("Expected newline!");
                     },
-                    Separator::Paragraph => quote! {
+                    SeparatorPattern::Paragraph => quote! {
                         (#RETURN_DATA, #INPUT) = simpar::split_paragraph(#INPUT).expect("Expected paragraph!");
                     },
-                    Separator::Period(split_pattern) => quote! {
+                    SeparatorPattern::Period(split_pattern) => quote! {
                         let j = #INPUT.find(#split_pattern).expect("Did not find separator!");
                         (#RETURN_DATA, #INPUT) = #INPUT.split_at(j);
                         #INPUT = #INPUT.strip_prefix(#split_pattern).unwrap();
                     },
-                    Separator::LiteralStr(lit_str) => quote! {
+                    SeparatorPattern::LiteralStr(lit_str) => quote! {
                         let j = #INPUT.find(#lit_str).expect("Did not find separator!");
                         (#RETURN_DATA, #INPUT) = #INPUT.split_at(j);
                         #INPUT = #INPUT.strip_prefix(#lit_str).unwrap();
                     },
-                    Separator::LiteralChar(lit_char) => quote! {
+                    SeparatorPattern::LiteralChar(lit_char) => quote! {
                         let j = #INPUT.find(#lit_char).expect("Did not find separator!");
                         (#RETURN_DATA, #INPUT) = #INPUT.split_at(j);
                         #INPUT = #INPUT.strip_prefix(#lit_char).unwrap();
                     },
-                    Separator::ByteOffset(lit_int) => quote! {
-                        (#RETURN_DATA, #INPUT) = #INPUT.split_at(#lit_int);
+                    SeparatorPattern::ByteOffset(offset) => quote! {
+                        (#RETURN_DATA, #INPUT) = #INPUT.split_at(#offset);
                     },
                 };
                 tokens.extend(find_index);
+
+                if separator.condensed {
+                    let condense = match &separator.pat {
+                        SeparatorPattern::Space(split_pattern) => {
+                            quote! {#INPUT = #INPUT.trim_start_matches(#split_pattern);}
+                        }
+                        SeparatorPattern::Newline => quote! {
+                            if let Some(#CONDENSE_NON_EMPTY) = #INPUT.lines().filter(|line| !line.is_empty()).next() {
+                                #INPUT = simpar::subslice_extend_right(#CONDENSE_NON_EMPTY, #INPUT);
+                            } else {
+                                #INPUT = &#INPUT[#INPUT.len()..];
+                            }
+                        },
+                        SeparatorPattern::Paragraph => quote! {
+                            if let Some(#CONDENSE_NON_EMPTY) = simpar::ParagraphIterable::paragraphs(#INPUT).filter(|par| !par.is_empty()).next() {
+                                #INPUT = simpar::subslice_extend_right(#CONDENSE_NON_EMPTY, #INPUT);
+                            } else {
+                                #INPUT = &#INPUT[#INPUT.len()..];
+                            }
+                        },
+                        SeparatorPattern::Period(split_pattern) => {
+                            quote! {#INPUT = #INPUT.trim_start_matches(#split_pattern);}
+                        }
+                        SeparatorPattern::LiteralStr(lit_str) => {
+                            quote! {#INPUT = #INPUT.trim_start_matches(#lit_str);}
+                        }
+                        SeparatorPattern::LiteralChar(lit_char) => {
+                            quote! {#INPUT = #INPUT.trim_start_matches(#lit_char);}
+                        }
+                        SeparatorPattern::ByteOffset(_) => quote! {},
+                    };
+
+                    tokens.extend(condense);
+                }
 
                 quote! {
                     #mat
@@ -334,12 +379,12 @@ mod format {
                 .collect()
         }
 
-        pub(crate) fn last_sep_period(format: &[MatchSeparator]) -> Separator {
+        pub(crate) fn last_sep_period(format: &[MatchSeparator]) -> SeparatorPattern {
             format
                 .iter()
                 .rev()
                 .find_map(|el| {
-                    if let MatchSeparator::Chg(p @ Separator::Period(_)) = el {
+                    if let MatchSeparator::Chg(p @ SeparatorPattern::Period(_)) = el {
                         Some(p)
                     } else {
                         None
@@ -349,12 +394,12 @@ mod format {
                 .clone()
         }
 
-        pub(crate) fn last_sep_space(format: &[MatchSeparator]) -> Separator {
+        pub(crate) fn last_sep_space(format: &[MatchSeparator]) -> SeparatorPattern {
             format
                 .iter()
                 .rev()
                 .find_map(|el| {
-                    if let MatchSeparator::Chg(p @ Separator::Space(_)) = el {
+                    if let MatchSeparator::Chg(p @ SeparatorPattern::Space(_)) = el {
                         Some(p)
                     } else {
                         None
@@ -370,8 +415,8 @@ impl syn::parse::Parse for Format {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         // default split patterns
         let mut format = vec![
-            MatchSeparator::Chg(Separator::Period(SplitPattern::DefaultPeriod)),
-            MatchSeparator::Chg(Separator::Space(SplitPattern::DefaultSpace)),
+            MatchSeparator::Chg(SeparatorPattern::Period(SplitPattern::DefaultPeriod)),
+            MatchSeparator::Chg(SeparatorPattern::Space(SplitPattern::DefaultSpace)),
         ];
 
         while !input.is_empty() {
@@ -424,9 +469,17 @@ impl syn::parse::Parse for Format {
                 // handle [+i] seperator
                 if inner.peek(Token![+]) {
                     inner.parse::<Token![+]>()?;
+
+                    let pat = SeparatorPattern::ByteOffset(inner.parse::<Expr>()?);
+                    let condensed = input.peek(Token![~]);
+                    if condensed {
+                        input.parse::<Token![~]>()?;
+                    }
+
+                    // there must be a separator in front to be here => use `Closed` with `Blank`
                     format.push(MatchSeparator::Closed(
                         Match::Blank,
-                        Separator::ByteOffset(inner.parse::<Expr>()?),
+                        Separator { pat, condensed },
                     ));
                     continue;
                 }
@@ -510,7 +563,7 @@ struct Parser {
 impl Parser {
     fn check(self) -> CheckedParser {
         if !self.format.check_open() {
-            // this shoud never happen because of the way `Format` is parsed 
+            // this shoud never happen because of the way `Format` is parsed
             panic!("Open match can only be used at the end of parser!");
         }
 
