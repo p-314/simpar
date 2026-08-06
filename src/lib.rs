@@ -90,7 +90,7 @@
 //! assert_eq!(n, vec![1, 2, 3, 4]);
 //! ```
 //!
-//! At the moment repetitions can contain at most one identifier.
+//! Multiple variables in repetitions create multiple separate iterators.
 //!
 //! ## Programmable separators
 //! Some separators can be modified. `{<separator> = <pattern>}` sets the sperator to `<pattern>`

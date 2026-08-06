@@ -152,11 +152,12 @@ impl Separator {
     }
 }
 
+#[derive(Clone)]
 enum Match {
     Blank,
     Var(Variable),
-    // repetition (inner, separator, collect)
-    Rep(Vec<MatchSeparator>, Separator, bool),
+    // repetition (inner, separator, collect, root)
+    Rep(Vec<MatchSeparator>, Separator, bool, bool),
 }
 
 mod mat {
@@ -181,7 +182,9 @@ mod mat {
             match self {
                 Match::Blank => vec![],
                 Match::Var(var) => vec![var.clone()],
-                Match::Rep(match_separators, _, _) => vars(match_separators),
+                Match::Rep(match_separators, _, _, __simpar_macro_internal_) => {
+                    vars(match_separators)
+                }
             }
         }
     }
@@ -205,51 +208,62 @@ impl ToTokens for Match {
                     },
                 });
             }
-            Match::Rep(match_separators, separator, collect) => {
-                let var = self.vars().first().cloned().map(|v| v.ident);
-                let decl = var.as_ref().map(|id| quote! {let #id;});
-                let assign = var.as_ref().map_or(quote! {let _}, |id| quote! {#id});
+            Match::Rep(match_separators, separator, collect, root) => {
+                if *root {
+                    let singles = Format::into_single_vars(match_separators);
+                    let reps = singles
+                        .into_iter()
+                        .map(|format| Match::Rep(format, separator.clone(), *collect, false));
+                    tokens.extend(quote! {
+                        #(#reps)*
+                    });
+                } else {
+                    let var = self.vars().first().cloned().map(|v| v.ident);
+                    let decl = var.as_ref().map(|id| quote! {let #id;});
+                    let assign = var.as_ref().map_or(quote! {let _}, |id| quote! {#id});
 
-                let condense = separator
-                    .condensed
-                    .then_some(quote! {.filter(|s| !s.is_empty())});
+                    let condense = separator
+                        .condensed
+                        .then_some(quote! {.filter(|s| !s.is_empty())});
 
-                // get iterator
-                tokens.extend(match &separator.pat {
-                    SeparatorPattern::Space(split_pattern) => quote! {
-                        let #ITER = #RETURN_DATA.split(#split_pattern)#condense;
-                    },
-                    SeparatorPattern::Newline => quote! {let #ITER = #RETURN_DATA.lines()#condense;},
-                    SeparatorPattern::Paragraph => quote! {
-                        let #ITER = simpar::ParagraphIterable::paragraphs(#RETURN_DATA)#condense;
-                    },
-                    SeparatorPattern::Period(split_pattern) => quote! {
-                        let #ITER = #RETURN_DATA.split(#split_pattern)#condense;
-                    },
-                    SeparatorPattern::LiteralStr(lit_str) => quote! {
-                        let #ITER = #RETURN_DATA.split(#lit_str)#condense;
-                    },
-                    SeparatorPattern::LiteralChar(lit_char) => quote! {
-                        let #ITER = #RETURN_DATA.split(#lit_char)#condense;
-                    },
-                    SeparatorPattern::ByteOffset(lit_int) => quote! {
-                        let #ITER = #RETURN_DATA.as_bytes().chunks(#lit_int).map(|slice| str::from_utf8(slice).expect("Index outside char boundary!"));
-                    },
-                });
+                    // get iterator
+                    tokens.extend(match &separator.pat {
+                        SeparatorPattern::Space(split_pattern) => quote! {
+                            let #ITER = #RETURN_DATA.split(#split_pattern)#condense;
+                        },
+                        SeparatorPattern::Newline => quote! {let #ITER = #RETURN_DATA.lines()#condense;},
+                        SeparatorPattern::Paragraph => quote! {
+                            let #ITER = simpar::ParagraphIterable::paragraphs(#RETURN_DATA)#condense;
+                        },
+                        SeparatorPattern::Period(split_pattern) => quote! {
+                            let #ITER = #RETURN_DATA.split(#split_pattern)#condense;
+                        },
+                        SeparatorPattern::LiteralStr(lit_str) => quote! {
+                            let #ITER = #RETURN_DATA.split(#lit_str)#condense;
+                        },
+                        SeparatorPattern::LiteralChar(lit_char) => quote! {
+                            let #ITER = #RETURN_DATA.split(#lit_char)#condense;
+                        },
+                        SeparatorPattern::ByteOffset(lit_int) => quote! {
+                            let #ITER = #RETURN_DATA.as_bytes().chunks(#lit_int).map(|slice| str::from_utf8(slice).expect("Index outside char boundary!"));
+                        },
+                    });
 
-                let col = collect.then_some(quote! {.collect::<Vec<_>>()});
-                tokens.extend(quote! {
-                    #assign = #ITER.map(|mut #INPUT| {
-                        #decl
-                        #(#match_separators)*
-                        #var
-                    })#col;
-                });
+                    let col = collect.then_some(quote! {.collect::<Vec<_>>()});
+                    tokens.extend(quote! {
+                        #assign = #ITER.map(|mut #INPUT| {
+                            #decl
+                            #(#match_separators)*
+                            #var
+                        })#col;
+                    });
+                }
             }
         }
     }
 }
 
+#[derive(Clone)]
 enum MatchSeparator {
     Open(Match),
     Closed(Match, Separator),
@@ -351,22 +365,41 @@ struct Format(Vec<MatchSeparator>);
 mod format {
     use crate::parse::*;
 
-    fn check_open(v: &[MatchSeparator]) -> bool {
-        v[..(v.len() - 1)]
-            .iter()
-            .all(|ms| matches!(ms, MatchSeparator::Closed(_, _) | MatchSeparator::Chg(_)))
-    }
-
     impl Format {
-        pub(crate) fn check_open(&self) -> bool {
-            check_open(&self.0)
+        fn validate_not_root(format: &mut [MatchSeparator]) {
+            for ms in format {
+                let m = match ms {
+                    MatchSeparator::Open(m) => m,
+                    MatchSeparator::Closed(m, _) => m,
+                    MatchSeparator::Chg(_) => continue,
+                };
+                match m {
+                    Match::Blank => {}
+                    Match::Var(_) => {}
+                    Match::Rep(match_separators, _, _, root) => {
+                        *root = false;
+                        Self::validate_not_root(match_separators);
+                    }
+                }
+            }
         }
 
-        pub(crate) fn check_rep(&self) -> bool {
-            self.0.iter().all(|ms| match ms {
-                MatchSeparator::Open(m) | MatchSeparator::Closed(m, _) => m.vars().len() <= 1,
-                MatchSeparator::Chg(_) => true,
-            })
+        pub(crate) fn validate_root(&mut self) {
+            for ms in &mut self.0 {
+                let m = match ms {
+                    MatchSeparator::Open(m) => m,
+                    MatchSeparator::Closed(m, _) => m,
+                    MatchSeparator::Chg(_) => continue,
+                };
+                match m {
+                    Match::Blank => {}
+                    Match::Var(_) => {}
+                    Match::Rep(match_separators, _, _, root) => {
+                        *root = true;
+                        Self::validate_not_root(match_separators);
+                    }
+                }
+            }
         }
 
         pub(crate) fn vars(&self) -> Vec<Variable> {
@@ -407,6 +440,72 @@ mod format {
                 })
                 .unwrap()
                 .clone()
+        }
+
+        /// Extracts all `Match::Var` from `format` and returns them together with relative indices
+        /// in **reverse** order.
+        fn into_blanks(format: &mut [MatchSeparator]) -> (Vec<Match>, Vec<Vec<usize>>) {
+            let mut vars = Vec::new();
+            let mut indices = Vec::new();
+            for (i, ms) in format.iter_mut().enumerate() {
+                let mat = match ms {
+                    MatchSeparator::Open(m) => m,
+                    MatchSeparator::Closed(m, _) => m,
+                    _ => continue,
+                };
+                match mat {
+                    Match::Blank => {}
+                    Match::Var(_) => {
+                        vars.push(std::mem::replace(mat, Match::Blank));
+                        indices.push(vec![i])
+                    }
+                    Match::Rep(match_separators, _, _, _) => {
+                        let (u, j) = Format::into_blanks(match_separators);
+                        vars.extend(u);
+                        indices.extend(j.into_iter().map(|mut k| {
+                            k.push(i);
+                            k
+                        }));
+                    }
+                }
+            }
+            (vars, indices)
+        }
+
+        pub(crate) fn into_single_vars(format: &[MatchSeparator]) -> Vec<Vec<MatchSeparator>> {
+            let mut blank = format.to_owned();
+            let (vars, indices) = Self::into_blanks(&mut blank);
+
+            // if `format` has zero variables return `blank` (equal to `format`)
+            if vars.is_empty() {
+                return vec![blank];
+            }
+
+            let mut singles = Vec::new();
+            'singles: for (v, mut ind) in vars.into_iter().zip(indices) {
+                let mut copy = blank.clone();
+
+                let mut vec_node = &mut copy;
+                while let Some(i) = ind.pop() {
+                    let node = &mut vec_node[i];
+                    let node_match = match node {
+                        MatchSeparator::Open(m) => m,
+                        MatchSeparator::Closed(m, _) => m,
+                        MatchSeparator::Chg(_) => unreachable!(),
+                    };
+                    match node_match {
+                        Match::Rep(match_separators, _, _, _) => vec_node = match_separators,
+                        _ => {
+                            *node_match = v;
+                            singles.push(copy);
+                            continue 'singles;
+                        }
+                    };
+                }
+                unreachable!()
+            }
+
+            singles
         }
     }
 }
@@ -461,7 +560,7 @@ impl syn::parse::Parse for Format {
                 let sep = Separator::parse_separaror(&format, input)?;
                 input.parse::<Token![*]>()?;
 
-                mat = Match::Rep(inner_format, sep, false);
+                mat = Match::Rep(inner_format, sep, false, false);
             } else if input.peek(Bracket) {
                 let inner;
                 bracketed!(inner in input);
@@ -490,7 +589,7 @@ impl syn::parse::Parse for Format {
                 let sep = Separator::parse_separaror(&format, input)?;
                 input.parse::<Token![*]>()?;
 
-                mat = Match::Rep(inner_format, sep, true);
+                mat = Match::Rep(inner_format, sep, true, false);
             } else if input.peek(Brace) {
                 SplitPattern::parse_sep_chg(input, &mut format)?;
                 continue;
@@ -561,23 +660,15 @@ struct Parser {
 }
 
 impl Parser {
-    fn check(self) -> CheckedParser {
-        if !self.format.check_open() {
-            // this shoud never happen because of the way `Format` is parsed
-            panic!("Open match can only be used at the end of parser!");
-        }
-
-        if !self.format.check_rep() {
-            panic!("Multivariable repetitions are unsupported.");
-        }
+    fn check(mut self) -> CheckedParser {
+        self.format.validate_root();
 
         CheckedParser(self)
     }
 }
 
 /// Wrapper for `Parser` to ensure that
-/// - `Open` is only used at the end of `Vec<..>`
-/// - `Var` is used at most once in `Rep`.
+/// - `root` is set to correctly in all repetitions
 struct CheckedParser(Parser);
 
 impl syn::parse::Parse for CheckedParser {

@@ -482,6 +482,49 @@ mod iter {
         // using just ([+2])*, would not fail, bacause the iterator is not consumed
         parse!("aa bb c" -> [[+2]],*);
     }
+
+    mod multi {
+        use simpar::parse;
+
+        #[test]
+        fn iter_space_multi() {
+            parse!("Hello World !" -> (mut first [+1] mut remainder),*);
+
+            assert_eq!(Some("H"), first.next());
+            assert_eq!(Some("W"), first.next());
+            assert_eq!(Some("!"), first.next());
+            assert_eq!(None, first.next());
+
+            assert_eq!(Some("ello"), remainder.next());
+            assert_eq!(Some("orld"), remainder.next());
+            assert_eq!(Some(""), remainder.next());
+            assert_eq!(None, remainder.next());
+        }
+
+        #[test]
+        fn iter_space_multi_collect() {
+            parse!("Hello World !" -> [first [+1] remainder],*);
+
+            assert_eq!(vec!["H", "W", "!"], first);
+            assert_eq!(vec!["ello", "orld", ""], remainder);
+        }
+
+        #[test]
+        fn iter_iter_multi_collect() {
+            parse!("Hello World" -> [first [+1] [lspace]'l'*],*);
+
+            assert_eq!(vec!["H", "W"], first);
+            assert_eq!(vec![vec!["e", "", "o"], vec!["or", "d"]], lspace);
+        }
+
+        #[test]
+        fn iter_multi_change() {
+            parse!("1x.2x3 4x.5x6" -> (_ . b {. = "x"} . c),*);
+
+            assert!(["2", "5"].into_iter().eq(b));
+            assert!(["3", "6"].into_iter().eq(c));
+        }
+    }
 }
 
 mod parse {
