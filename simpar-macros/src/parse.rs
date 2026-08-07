@@ -457,7 +457,7 @@ mod format {
                     Match::Blank => {}
                     Match::Var(_) => {
                         vars.push(std::mem::replace(mat, Match::Blank));
-                        indices.push(vec![i])
+                        indices.push(vec![i]);
                     }
                     Match::Rep(match_separators, _, _, _) => {
                         let (u, j) = Format::into_blanks(match_separators);
@@ -472,6 +472,8 @@ mod format {
             (vars, indices)
         }
 
+        /// Returns copies of `format` for each `Match::Var` such that each copy has exactly one `Match::Var` 
+        /// or one exact copy if `format` has none.
         pub(crate) fn into_single_vars(format: &[MatchSeparator]) -> Vec<Vec<MatchSeparator>> {
             let mut blank = format.to_owned();
             let (vars, indices) = Self::into_blanks(&mut blank);
