@@ -251,6 +251,13 @@ mod programmable {
         assert_eq!(Some(3), a.next());
         assert_eq!(None, a.next());
     }
+
+    #[test]
+    fn change_iter_collect() {
+        parse!("1,2,3" -> {, = ','} [a: u8],*);
+
+        assert_eq!(vec![1, 2, 3], a);
+    }
 }
 
 mod condense {

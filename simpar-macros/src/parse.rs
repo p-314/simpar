@@ -1,3 +1,5 @@
+use std::slice::{Iter, IterMut};
+
 use proc_macro2::{TokenStream, TokenTree};
 use quote::{ToTokens, quote};
 use syn::{
@@ -64,10 +66,7 @@ impl ToTokens for SplitPattern {
 
 impl SplitPattern {
     /// Parse `{<sep> = <pat>}` into `MatchSeparator::Chg`
-    fn parse_sep_chg(
-        input: syn::parse::ParseStream,
-        format: &mut Vec<MatchSeparator>,
-    ) -> syn::Result<()> {
+    fn parse_sep_chg(input: syn::parse::ParseStream, format: &mut Format) -> syn::Result<()> {
         let inner;
         braced!(inner in input);
 
@@ -110,7 +109,7 @@ enum SeparatorPattern {
 
 impl Separator {
     fn parse_separaror(
-        format_context: &[MatchSeparator],
+        format_context: &Format,
         input: syn::parse::ParseStream,
     ) -> syn::Result<Self> {
         let pat;
@@ -157,17 +156,17 @@ enum Match {
     Blank,
     Var(Variable),
     // repetition (inner, separator, collect, root)
-    Rep(Vec<MatchSeparator>, Separator, bool, bool),
+    Rep(Format, Separator, bool, bool),
 }
 
 mod mat {
-    use crate::parse::Match;
+    use crate::parse::{Format, Match};
     use crate::parse::{MatchSeparator, Variable};
 
     /// Return the `Var`s in `v`.
-    fn vars(v: &Vec<MatchSeparator>) -> Vec<Variable> {
+    fn vars(v: &Format) -> Vec<Variable> {
         let mut var = Vec::new();
-        for ms in v {
+        for ms in &v.0 {
             var.extend(match ms {
                 MatchSeparator::Open(m) | MatchSeparator::Closed(m, _) => m.vars(),
                 MatchSeparator::Chg(_) => vec![],
@@ -210,7 +209,7 @@ impl ToTokens for Match {
             }
             Match::Rep(match_separators, separator, collect, root) => {
                 if *root {
-                    let singles = Format::into_single_vars(match_separators);
+                    let singles = Format::singles(match_separators);
                     let reps = singles
                         .into_iter()
                         .map(|format| Match::Rep(format, separator.clone(), *collect, false));
@@ -250,10 +249,11 @@ impl ToTokens for Match {
                     });
 
                     let col = collect.then_some(quote! {.collect::<Vec<_>>()});
+
                     tokens.extend(quote! {
                         #assign = #ITER.map(|mut #INPUT| {
                             #decl
-                            #(#match_separators)*
+                            #match_separators
                             #var
                         })#col;
                     });
@@ -360,14 +360,41 @@ impl ToTokens for MatchSeparator {
     }
 }
 
+#[derive(Clone)]
 struct Format(Vec<MatchSeparator>);
+
+impl Format {
+    fn push(&mut self, item: MatchSeparator) {
+        self.0.push(item);
+    }
+}
+
+impl<'a> IntoIterator for &'a Format {
+    type Item = &'a MatchSeparator;
+
+    type IntoIter = Iter<'a, MatchSeparator>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut Format {
+    type Item = &'a mut MatchSeparator;
+
+    type IntoIter = IterMut<'a, MatchSeparator>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter_mut()
+    }
+}
 
 mod format {
     use crate::parse::*;
 
     impl Format {
-        fn validate_not_root(format: &mut [MatchSeparator]) {
-            for ms in format {
+        fn validate_not_root(&mut self) {
+            for ms in self {
                 let m = match ms {
                     MatchSeparator::Open(m) => m,
                     MatchSeparator::Closed(m, _) => m,
@@ -385,7 +412,7 @@ mod format {
         }
 
         pub(crate) fn validate_root(&mut self) {
-            for ms in &mut self.0 {
+            for ms in self {
                 let m = match ms {
                     MatchSeparator::Open(m) => m,
                     MatchSeparator::Closed(m, _) => m,
@@ -412,8 +439,8 @@ mod format {
                 .collect()
         }
 
-        pub(crate) fn last_sep_period(format: &[MatchSeparator]) -> SeparatorPattern {
-            format
+        pub(crate) fn last_sep_period(&self) -> SeparatorPattern {
+            self.0
                 .iter()
                 .rev()
                 .find_map(|el| {
@@ -427,8 +454,8 @@ mod format {
                 .clone()
         }
 
-        pub(crate) fn last_sep_space(format: &[MatchSeparator]) -> SeparatorPattern {
-            format
+        pub(crate) fn last_sep_space(&self) -> SeparatorPattern {
+            self.0
                 .iter()
                 .rev()
                 .find_map(|el| {
@@ -444,10 +471,10 @@ mod format {
 
         /// Extracts all `Match::Var` from `format` and returns them together with relative indices
         /// in **reverse** order.
-        fn into_blanks(format: &mut [MatchSeparator]) -> (Vec<Match>, Vec<Vec<usize>>) {
+        fn extract_var(&mut self) -> (Vec<Match>, Vec<Vec<usize>>) {
             let mut vars = Vec::new();
             let mut indices = Vec::new();
-            for (i, ms) in format.iter_mut().enumerate() {
+            for (i, ms) in self.0.iter_mut().enumerate() {
                 let mat = match ms {
                     MatchSeparator::Open(m) => m,
                     MatchSeparator::Closed(m, _) => m,
@@ -460,7 +487,7 @@ mod format {
                         indices.push(vec![i]);
                     }
                     Match::Rep(match_separators, _, _, _) => {
-                        let (u, j) = Format::into_blanks(match_separators);
+                        let (u, j) = Format::extract_var(match_separators);
                         vars.extend(u);
                         indices.extend(j.into_iter().map(|mut k| {
                             k.push(i);
@@ -472,11 +499,11 @@ mod format {
             (vars, indices)
         }
 
-        /// Returns copies of `format` for each `Match::Var` such that each copy has exactly one `Match::Var` 
+        /// Returns copies of `format` for each `Match::Var` such that each copy has exactly one `Match::Var`
         /// or one exact copy if `format` has none.
-        pub(crate) fn into_single_vars(format: &[MatchSeparator]) -> Vec<Vec<MatchSeparator>> {
-            let mut blank = format.to_owned();
-            let (vars, indices) = Self::into_blanks(&mut blank);
+        pub(crate) fn singles(&self) -> Vec<Format> {
+            let mut blank = self.clone();
+            let (vars, indices) = Self::extract_var(&mut blank);
 
             // if `format` has zero variables return `blank` (equal to `format`)
             if vars.is_empty() {
@@ -489,7 +516,7 @@ mod format {
 
                 let mut vec_node = &mut copy;
                 while let Some(i) = ind.pop() {
-                    let node = &mut vec_node[i];
+                    let node = &mut vec_node.0[i];
                     let node_match = match node {
                         MatchSeparator::Open(m) => m,
                         MatchSeparator::Closed(m, _) => m,
@@ -512,13 +539,22 @@ mod format {
     }
 }
 
+impl ToTokens for Format {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let inner = &self.0;
+        tokens.extend(quote! {
+            #(#inner)*
+        });
+    }
+}
+
 impl syn::parse::Parse for Format {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         // default split patterns
-        let mut format = vec![
+        let mut format = Format(vec![
             MatchSeparator::Chg(SeparatorPattern::Period(SplitPattern::DefaultPeriod)),
             MatchSeparator::Chg(SeparatorPattern::Space(SplitPattern::DefaultSpace)),
-        ];
+        ]);
 
         while !input.is_empty() {
             let mat;
@@ -556,7 +592,7 @@ impl syn::parse::Parse for Format {
                 let inner;
                 parenthesized!(inner in input);
 
-                let Format(inner_format) = inner.parse::<Format>()?;
+                let inner_format = inner.parse::<Format>()?;
 
                 // get rep separator
                 let sep = Separator::parse_separaror(&format, input)?;
@@ -585,7 +621,7 @@ impl syn::parse::Parse for Format {
                     continue;
                 }
 
-                let Format(inner_format) = inner.parse::<Format>()?;
+                let inner_format = inner.parse::<Format>()?;
 
                 // get rep separator
                 let sep = Separator::parse_separaror(&format, input)?;
@@ -618,7 +654,7 @@ impl syn::parse::Parse for Format {
             format.push(MatchSeparator::Closed(mat, sep));
         }
 
-        Ok(Self(format))
+        Ok(format)
     }
 }
 
