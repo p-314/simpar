@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/p-314/simpar/compare/simpar-v0.2.0...simpar-v0.3.0) - 2026-08-08
+
+### Added
+
+- [**breaking**] allowed for multiple variables in repetitions
+- [**breaking**] removed the multispace separator and added condensing to all separators
+
 ## [0.2.0](https://github.com/p-314/simpar/compare/simpar-v0.1.3...simpar-v0.2.0) - 2026-06-25
 
 ### Added
