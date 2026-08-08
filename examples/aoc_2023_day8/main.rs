@@ -1,6 +1,8 @@
 use simpar::parse;
 
 fn parse(input: &str) -> (&str, impl Iterator<Item = (&str, (&str, &str))>) {
+    //dream:
+    //parse!(input -> directions # (map " = (" $0 ", " $0 ")");*);
     parse!(input -> directions # (lines);*);
     let map = lines.map(|line| {
         parse!(line -> pos " = (" left ", " right ")");

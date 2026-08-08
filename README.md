@@ -48,7 +48,6 @@ Supported separators are:
 | Space | `,` | whitespace (`' '`)  | `parse!("AA BBB" -> a, b)` |
 | Newline | `;` | newline (`'\n'` or `"\r\n"`)  | `parse!("AA\nBBB" -> a; b)` |
 | Paragraph | `#` | empty line | `parse!("AA\n\nBBB" -> a # b)` |
-| Multispace | `~` | one or more consecutive whitespaces (`' '`) | <code>parse!("AA&nbsp;&nbsp;&nbsp;&nbsp; BBB" -> a~ b)</code> |
 | Period | `.` | period (`'.'`) | `parse!("AA.BBB" -> a. b)` |
 | Literal | literal char or string | next occurrence of the literal | `parse!("AAxBBB" -> a "x" b)` |
 | ByteOffset | `[+i]` with an integer literal `i` or expression | byte index `i` | `parse!("AABBB" -> a [+2] b)` |
@@ -67,7 +66,6 @@ assert_eq!(ratio, Ok(3.14));
 ```
 
 ## Repetitions
-
 Repeating patterns can be extracted using `(<pattern>)<separator>*`:
 
 ```rust
@@ -94,7 +92,7 @@ parse!("1 2 3 4" -> [n: i32],*);
 assert_eq!(n, vec![1, 2, 3, 4]);
 ```
 
-At the moment repetitions can contain at most one identifier.
+Multiple variables in repetitions create multiple separate iterators.
 
 ## Programmable separators
 Some separators can be modified. `{<separator> = <pattern>}` sets the sperator to `<pattern>`
@@ -115,6 +113,19 @@ parse!(file -> _; {, = ','} country, capital, population: u64, tld);
 ```
 
 Only the space (`,`) and period (`.`) seperator are programmable.
+
+## Condensing
+By default every separator splits exactly once. Using `<separator>~` changes thar behavior to
+return the first remainder that is not empty.
+
+For example `,~` splits the input at consecutive spaces.
+
+```rust
+parse!("long      pause" -> x,~ y);
+
+assert_eq!(x, "long");
+assert_eq!(y, "pause");
+```
 
 # License
 Simpar is distributed under the terms of both the MIT license and the

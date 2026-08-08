@@ -95,14 +95,6 @@ mod sep {
     }
 
     #[test]
-    fn multispace() {
-        parse!("hello      world" -> a~ b);
-
-        assert_eq!("hello", a);
-        assert_eq!("world", b);
-    }
-
-    #[test]
     fn paragraph() {
         parse!("hello\n\nworld" -> a # b);
 
@@ -183,12 +175,6 @@ mod sep {
 
     #[test]
     #[should_panic]
-    fn missing_multispace_end() {
-        parse!("hello   world" -> _~ _~);
-    }
-
-    #[test]
-    #[should_panic]
     fn missing_literal() {
         parse!("hello world" -> _ "test" _);
     }
@@ -265,6 +251,113 @@ mod programmable {
         assert_eq!(Some(3), a.next());
         assert_eq!(None, a.next());
     }
+
+    #[test]
+    fn change_iter_collect() {
+        parse!("1,2,3" -> {, = ','} [a: u8],*);
+
+        assert_eq!(vec![1, 2, 3], a);
+    }
+}
+
+mod condense {
+    use simpar::parse;
+
+    #[test]
+    fn condense_space() {
+        parse!("Hello     World!" -> a,~ b);
+
+        assert_eq!("Hello", a);
+        assert_eq!("World!", b);
+    }
+
+    #[test]
+    fn condense_newline() {
+        parse!("Hello\n\n\nWorld!" -> a;~ b);
+
+        assert_eq!("Hello", a);
+        assert_eq!("World!", b);
+    }
+
+    #[test]
+    fn condense_paragraph() {
+        parse!("Hello\n\n\r\n\r\nWorld!" -> a #~ b);
+
+        assert_eq!("Hello", a);
+        assert_eq!("World!", b);
+    }
+
+    #[test]
+    fn condense_period() {
+        parse!("07....05...2026" -> a.~ b.~ c);
+
+        assert_eq!("07", a);
+        assert_eq!("05", b);
+        assert_eq!("2026", c);
+    }
+
+    #[test]
+    fn condense_literal_str() {
+        parse!("hello123123123world456456!" -> a "123"~ b "456"~ c);
+
+        assert_eq!("hello", a);
+        assert_eq!("world", b);
+        assert_eq!("!", c);
+    }
+
+    #[test]
+    fn condense_literal_char() {
+        parse!("helloööööworldööö!" -> a 'ö'~ b 'ö'~ c);
+
+        assert_eq!("hello", a);
+        assert_eq!("world", b);
+        assert_eq!("!", c);
+    }
+
+    #[test]
+    fn condense_byte_offset() {
+        parse!("HelloWorld!" -> a[+5]~ b);
+
+        assert_eq!("Hello", a);
+        assert_eq!("World!", b);
+    }
+
+    #[test]
+    fn condense_newline_iter() {
+        parse!("hello\nworld\n\n\n!" -> (mut a);~*);
+
+        assert_eq!(Some("hello"), a.next());
+        assert_eq!(Some("world"), a.next());
+        assert_eq!(Some("!"), a.next());
+        assert_eq!(None, a.next());
+    }
+
+    mod migration {
+        use simpar::parse;
+
+        #[test]
+        fn multispace() {
+            // multispace
+            parse!("hello      world" -> a,~ b);
+
+            assert_eq!("hello", a);
+            assert_eq!("world", b);
+
+            // iter_multispace
+            parse!("hello       world    !" -> (mut a),~*);
+
+            assert_eq!(Some("hello"), a.next());
+            assert_eq!(Some("world"), a.next());
+            assert_eq!(Some("!"), a.next());
+            assert_eq!(None, a.next());
+        }
+
+        #[test]
+        #[should_panic]
+        fn missing_multispace_end() {
+            parse!("hello   world" -> _,~ _,~);
+        }
+    }
 }
 
 mod iter {
@@ -285,16 +378,6 @@ mod iter {
     #[test]
     fn iter_newline() {
         parse!("hello\nworld\r\n!" -> (mut a);*);
-
-        assert_eq!(Some("hello"), a.next());
-        assert_eq!(Some("world"), a.next());
-        assert_eq!(Some("!"), a.next());
-        assert_eq!(None, a.next());
-    }
-
-    #[test]
-    fn iter_multispace() {
-        parse!("hello       world    !" -> (mut a)~*);
 
         assert_eq!(Some("hello"), a.next());
         assert_eq!(Some("world"), a.next());
@@ -405,6 +488,49 @@ mod iter {
         // parsing should fail, because the last item is too short to split at index 2
         // using just ([+2])*, would not fail, bacause the iterator is not consumed
         parse!("aa bb c" -> [[+2]],*);
+    }
+
+    mod multi {
+        use simpar::parse;
+
+        #[test]
+        fn iter_space_multi() {
+            parse!("Hello World !" -> (mut first [+1] mut remainder),*);
+
+            assert_eq!(Some("H"), first.next());
+            assert_eq!(Some("W"), first.next());
+            assert_eq!(Some("!"), first.next());
+            assert_eq!(None, first.next());
+
+            assert_eq!(Some("ello"), remainder.next());
+            assert_eq!(Some("orld"), remainder.next());
+            assert_eq!(Some(""), remainder.next());
+            assert_eq!(None, remainder.next());
+        }
+
+        #[test]
+        fn iter_space_multi_collect() {
+            parse!("Hello World !" -> [first [+1] remainder],*);
+
+            assert_eq!(vec!["H", "W", "!"], first);
+            assert_eq!(vec!["ello", "orld", ""], remainder);
+        }
+
+        #[test]
+        fn iter_iter_multi_collect() {
+            parse!("Hello World" -> [first [+1] [lspace]'l'*],*);
+
+            assert_eq!(vec!["H", "W"], first);
+            assert_eq!(vec![vec!["e", "", "o"], vec!["or", "d"]], lspace);
+        }
+
+        #[test]
+        fn iter_multi_change() {
+            parse!("1x.2x3 4x.5x6" -> (_ . b {. = "x"} . c),*);
+
+            assert!(["2", "5"].into_iter().eq(b));
+            assert!(["3", "6"].into_iter().eq(c));
+        }
     }
 }
 
