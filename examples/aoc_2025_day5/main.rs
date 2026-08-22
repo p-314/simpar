@@ -1,16 +1,11 @@
 use simpar::parse;
 
 fn parse(input: &str) -> (impl Iterator<Item = (u64, u64)>, impl Iterator<Item = u64>) {
-    //dream:
-    //parse!(input -> (id_ranges: u64 "-" $0: u64);* # (ids: u64);*);
-    parse!(input -> (id_ranges);* # (ids: u64);*);
-    let id_ranges = id_ranges.map(|line| {
-        parse!(line -> left: u64 "-" right: u64);
-        (left, right)
-    });
+    parse!(input -> (id_ranges: u64 "-" $id_ranges: u64);* # (ids: u64);*);
     (id_ranges, ids)
 }
 
+#[cfg_attr(test, test)]
 fn main() {
     let input = include_str!("input.txt");
 
