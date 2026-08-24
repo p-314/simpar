@@ -3,7 +3,8 @@ use std::slice::{Iter, IterMut};
 use proc_macro2::{TokenStream, TokenTree};
 use quote::{ToTokens, quote};
 use syn::{
-    Expr, Ident, LitChar, LitStr, Token, Type, braced, bracketed, parenthesized, parse_macro_input,
+    Expr, Ident, LitChar, LitInt, LitStr, Token, Type, braced, bracketed, parenthesized,
+    parse_macro_input,
     token::{Brace, Bracket, Paren},
 };
 
@@ -55,6 +56,12 @@ impl Reference {
             proc_macro2::Span::call_site(),
         )
     }
+}
+
+#[derive(Clone)]
+enum ReferenceIdentifier {
+    Id(Ident),
+    Num(usize),
 }
 
 /// Type for the changeable value of programmable separators.
@@ -168,6 +175,7 @@ enum Match {
     Var(Variable),
     // reference (ref, referenced)
     Ref(Variable, Ident),
+    RefTemp(Option<(Type, bool)>, ReferenceIdentifier),
     // repetition (inner, separator, collect, root)
     Rep(Format, Separator, bool, bool),
 }
@@ -186,6 +194,7 @@ mod mat {
                 Match::Var(var) => vec![var.clone()],
                 Match::Rep(match_separators, _, _, _) => match_separators.vars(),
                 Match::Ref(_, _) => vec![],
+                Match::RefTemp(_, _) => vec![],
             }
         }
 
@@ -291,6 +300,7 @@ impl ToTokens for Match {
                     },
                 });
             }
+            Match::RefTemp(_, _) => unreachable!("Error: reached `to_tokens` for `RefTemp`!"),
         }
     }
 }
@@ -442,8 +452,8 @@ impl<'a> IntoIterator for &'a mut Format {
 }
 
 mod format {
-    use std::collections::HashSet;
     use crate::parse::*;
+    use std::collections::HashSet;
 
     impl Format {
         // Set the `root` attribute of all repetitions to `false`.
@@ -457,6 +467,7 @@ mod format {
                         Self::validate_not_root(match_separators);
                     }
                     Match::Ref(_, _) => {}
+                    Match::RefTemp(_, _) => {}
                 }
             }
         }
@@ -471,6 +482,7 @@ mod format {
                         Self::validate_not_root(match_separators);
                     }
                     Match::Ref(_, _) => {}
+                    Match::RefTemp(_, _) => {}
                 }
             }
         }
@@ -503,6 +515,15 @@ mod format {
                 .collect()
         }
 
+        fn referenced_vars(&self) -> Vec<Variable> {
+            let vars = self.vars();
+            let referenced: HashSet<&Ident> = HashSet::from_iter(self.referenced());
+
+            vars.into_iter()
+                .filter(|v| referenced.contains(&v.ident))
+                .collect()
+        }
+
         // Return the return variable inside a repetition or `None` if nothing should be returned.
         pub(crate) fn rep_return_ident(&self) -> Option<&Ident> {
             // check for combinators first
@@ -525,6 +546,7 @@ mod format {
                             return return_ident;
                         }
                     }
+                    Match::RefTemp(_, _) => {}
                 };
             }
             None
@@ -561,6 +583,28 @@ mod format {
                     Match::Rep(format, _, _, _) => {
                         roots.extend(format.roots());
                     }
+                    Match::RefTemp(_, _) => {}
+                }
+            }
+
+            roots.into_iter().collect()
+        }
+
+        // Returns all referenced identifiers in a repetition.
+        fn referenced(&self) -> Vec<&Ident> {
+            let mut roots = HashSet::new();
+
+            for m in self.matches() {
+                match m {
+                    Match::Blank => {}
+                    Match::Var(_) => {}
+                    Match::Ref(_, ident) => {
+                        roots.insert(ident);
+                    }
+                    Match::Rep(format, _, _, _) => {
+                        roots.extend(format.referenced());
+                    }
+                    Match::RefTemp(_, _) => {}
                 }
             }
 
@@ -630,6 +674,7 @@ mod format {
                         }
                     }
                     Match::Rep(format, _, _, _) => format.clean_ident(var),
+                    Match::RefTemp(_, _) => {}
                 }
             }
         }
@@ -670,10 +715,11 @@ mod format {
                     Match::Blank => {}
                     Match::Var(variable) if &variable.ident == var => {
                         references += 1;
+                        root = Some(vec![]);
                     }
                     Match::Ref(_, ident) if ident == var => {
                         references += 1;
-                        root = Some(vec![])
+                        root = Some(vec![]);
                     }
                     Match::Rep(format, _, _, _) => match format.get_root(var) {
                         Some(mut tail) => {
@@ -691,9 +737,8 @@ mod format {
                 // self is root
                 Some(vec![])
             } else if references == 1 {
-                // not in root
+                // either exactly one child that is a reference or 
                 // exactly one child that leads to root
-                // todo!
                 root
             } else {
                 // no reference in self
@@ -701,6 +746,9 @@ mod format {
             }
         }
 
+        /// Inserts all combinators for `var`.
+        /// Assumes that `self` is the root for combining `var` and inserts
+        /// `MatchSeparator::CmbRoot` into `self` and `MatchSeparator::Cmb` into children.
         fn insert_cmb_root(&mut self, var: Variable, cmb_i: &mut usize) {
             let var_ident = &var.ident;
             let mut inputs = vec![];
@@ -735,10 +783,11 @@ mod format {
 
             self.push(MatchSeparator::CmbRoot(inputs, var));
         }
-        
-        /// insert all combinators for `var` and return the last output or `None` if there is no
-        /// reference.
-        /// not root -> output should be a new identifier
+
+        /// Inserts all combinators for `var` and return the last output or `None` if there is
+        /// no reference.
+        /// Assumes that `self` is not the root for combining `var` and only inserts
+        /// `MatchSeparator::Cmb`.
         fn insert_cmb_not_root(&mut self, var: &Ident, cmb_i: &mut usize) -> Option<Ident> {
             // combinator inputs
             let mut inputs: Vec<Ident> = vec![];
@@ -784,7 +833,7 @@ mod format {
 
         pub(crate) fn insert_cmb(&mut self) {
             let mut cmb_i = 0;
-            for var in self.vars() {
+            for var in self.referenced_vars() {
                 let var_ident = &var.ident;
 
                 if let Some(mut path) = self.get_root(var_ident) {
@@ -809,6 +858,37 @@ mod format {
             }
         }
 
+        pub(crate) fn validate_refs(&mut self, vars: &[Variable], reference_id: &mut usize) {
+            for m in self.matches_mut() {
+                match m {
+                    Match::Blank => {}
+                    Match::Var(_) => {}
+                    Match::Ref(_, _) => {}
+                    Match::RefTemp(ty, reference_identifier) => {
+                        let ty = ty.clone();
+                        let ident = match reference_identifier {
+                            ReferenceIdentifier::Id(ident) => ident.clone(),
+                            ReferenceIdentifier::Num(i) => vars[*i].ident.clone(),
+                        };
+                        let _ = std::mem::replace(
+                            m,
+                            Match::Ref(
+                                Variable {
+                                    mutability: None,
+                                    ident: Reference::from_id(*reference_id),
+                                    conversion_type: ty,
+                                },
+                                ident,
+                            ),
+                        );
+                        *reference_id += 1;
+                    }
+                    Match::Rep(format, _, _, _) => {
+                        format.validate_refs(vars, reference_id);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -817,16 +897,16 @@ impl ToTokens for Format {
         // temporary variables
         let decl = self
             .into_iter()
-            .find_map(|ms| match ms {
-                MatchSeparator::Cmb(idents, _, _) => Some(idents),
-                MatchSeparator::CmbRoot(idents, _) => Some(idents),
-                _ => None,
+            .flat_map(|ms| match ms {
+                MatchSeparator::Cmb(idents, _, _) => idents.iter(),
+                MatchSeparator::CmbRoot(idents, _) => idents.iter(),
+                _ => [].iter(),
             })
-            .map(|idents| quote! {#(let #idents;)*});
+            .map(|idents| quote! {let #idents;});
 
         let inner = &self.0;
         tokens.extend(quote! {
-            #decl
+            #(#decl)*
             #(#inner)*
         });
     }
@@ -839,9 +919,6 @@ impl syn::parse::Parse for Format {
             MatchSeparator::Chg(SeparatorPattern::Period(SplitPattern::DefaultPeriod)),
             MatchSeparator::Chg(SeparatorPattern::Space(SplitPattern::DefaultSpace)),
         ]);
-
-        // reference id
-        let mut reference_id = 0;
 
         while !input.is_empty() {
             let mat;
@@ -921,8 +998,16 @@ impl syn::parse::Parse for Format {
             } else if input.peek(Token![$]) {
                 input.parse::<Token![$]>()?;
 
-                //let var = input.parse::<LitInt>()?.base10_parse::<usize>()?;
-                let var = input.parse::<Ident>()?;
+                let ref_id = if input.peek(LitInt) {
+                    let num = input.parse::<LitInt>()?.base10_parse::<usize>()?;
+                    ReferenceIdentifier::Num(num)
+                } else if input.peek(Ident) {
+                    let var = input.parse::<Ident>()?;
+                    ReferenceIdentifier::Id(var)
+                } else {
+                    return Err(input.error("expected identifier or integer literal"));
+                };
+
                 let ty = input
                     .peek(Token![:])
                     .then(|| {
@@ -937,15 +1022,7 @@ impl syn::parse::Parse for Format {
                     })
                     .map_or(Ok(None), |y: syn::Result<(Type, bool)>| y.map(Some))?;
 
-                mat = Match::Ref(
-                    Variable {
-                        mutability: None,
-                        ident: Reference::from_id(reference_id),
-                        conversion_type: ty,
-                    },
-                    var,
-                );
-                reference_id += 1;
+                mat = Match::RefTemp(ty, ref_id);
             } else {
                 // allow for consecutive separators by treating this as a `Blank`
                 mat = Match::Blank;
@@ -1016,7 +1093,8 @@ impl Parser {
     fn check(mut self) -> CheckedParser {
         self.format.validate_root();
 
-        //self.format.insert_temps();
+        let vars_ordered = self.format.vars();
+        self.format.validate_refs(&vars_ordered, &mut 0);
 
         self.format.insert_cmb();
 

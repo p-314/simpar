@@ -586,6 +586,48 @@ mod iter {
             assert_eq!(("a", vec!["b", "e"]), x);
             assert_eq!(vec![("d", vec![1u8, 2, 3]), ("f", vec![4u8, 2])], y);
         }
+
+
+        #[test]
+        fn reference_numbered() {
+            parse!("hello world!" -> a, $0);
+
+            assert_eq!(("hello", "world!"), a);
+        
+            parse!("a b c d e" -> _a, _b, c, _d, $2);
+
+            assert_eq!(("c", "e"), c);
+        }
+
+
+        #[test]
+        fn reference_iter_numbered() {
+            parse!("Hello world!" -> (mut a [+1] $0),*);
+
+            assert_eq!(Some(("H", "ello")), a.next());
+            assert_eq!(Some(("w", "orld!")), a.next());
+            assert_eq!(None, a.next());
+        }
+
+
+        #[test]
+        #[should_panic]
+        fn reference_compilation_test() {
+            parse!("" -> _a, $_a);
+            parse!("" -> _a, $_a, $_a, $_a);
+            parse!("" -> $_b, _b);
+            parse!("" -> _a, $_a, $_b, _b);
+            
+            parse!("" -> _a, ($_a),*);
+            parse!("" -> $_a, (_a),*);
+            parse!("" -> (_a),*; $_a);
+            parse!("" -> (_a),*; ($_a),*);
+            parse!("" -> (_a, $_b),*; ($_a, _b),*);
+            
+            parse!("" -> ((_a),*; ($_a),*);* # $_a);
+            parse!("" -> (($_a),*; (_a),*);* # $_a);
+            parse!("" -> ((_a, _b),*; ($_a, $_b),*);* # $_b, $_a);
+        }
     }
 }
 
