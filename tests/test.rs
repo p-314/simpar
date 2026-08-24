@@ -591,11 +591,12 @@ mod iter {
         #[test]
         fn reference_numbered() {
             parse!("hello world!" -> a, $0);
-
             assert_eq!(("hello", "world!"), a);
+
+            parse!("hello world !" -> $1, _a, b);
+            assert_eq!(("hello", "!"), b);
         
             parse!("a b c d e" -> _a, _b, c, _d, $2);
-
             assert_eq!(("c", "e"), c);
         }
 

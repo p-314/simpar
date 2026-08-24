@@ -199,18 +199,15 @@ mod mat {
         }
 
         pub(crate) fn var_to_ref(&mut self) {
-            match self {
-                Match::Var(variable) => {
-                    let ident = variable.ident.clone();
-                    let new_ident = syn::Ident::new(
-                        &format!("__simpar_macro_internal_{}_ref", ident.to_string()),
-                        Span::call_site(),
-                    );
-                    let mut reference = variable.clone();
-                    reference.ident = new_ident;
-                    *self = Match::Ref(reference, ident);
-                }
-                _ => {}
+            if let Match::Var(variable) = self {
+                let ident = variable.ident.clone();
+                let new_ident = syn::Ident::new(
+                    &format!("__simpar_macro_internal_{}_ref", ident),
+                    Span::call_site(),
+                );
+                let mut reference = variable.clone();
+                reference.ident = new_ident;
+                *self = Match::Ref(reference, ident);
             }
         }
     }
@@ -721,14 +718,13 @@ mod format {
                         references += 1;
                         root = Some(vec![]);
                     }
-                    Match::Rep(format, _, _, _) => match format.get_root(var) {
-                        Some(mut tail) => {
+                    Match::Rep(format, _, _, _) => {
+                        if let Some(mut tail) = format.get_root(var) {
                             references += 1;
                             tail.push(i);
                             root = Some(tail);
                         }
-                        None => {}
-                    },
+                    }
                     _ => {}
                 }
             }
@@ -737,7 +733,7 @@ mod format {
                 // self is root
                 Some(vec![])
             } else if references == 1 {
-                // either exactly one child that is a reference or 
+                // either exactly one child that is a reference or
                 // exactly one child that leads to root
                 root
             } else {
@@ -868,7 +864,9 @@ mod format {
                         let ty = ty.clone();
                         let ident = match reference_identifier {
                             ReferenceIdentifier::Id(ident) => ident.clone(),
-                            ReferenceIdentifier::Num(i) => vars[*i].ident.clone(),
+                            ReferenceIdentifier::Num(i) => {
+                                vars.get(*i).expect("Index out of bounds!").ident.clone()
+                            }
                         };
                         let _ = std::mem::replace(
                             m,
