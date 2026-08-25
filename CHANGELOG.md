@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/p-314/simpar/compare/simpar-v0.3.0...simpar-v0.4.0) - 2026-08-25
+
+### Added
+
+- reference matches can use indexing `$<i>` to refererence to i-th variable
+- [**breaking**] added references `$` to combine variables into tuples
+
 ## [0.3.0](https://github.com/p-314/simpar/compare/simpar-v0.2.0...simpar-v0.3.0) - 2026-08-08
 
 ### Added
