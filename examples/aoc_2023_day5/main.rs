@@ -1,20 +1,11 @@
 use simpar::parse;
 
 fn parse(input: &str) -> (Vec<usize>, impl Iterator<Item = Vec<(usize, usize, usize)>>) {
-    parse!(input -> _, [seeds: usize],* # (_; (maps);*)#*);
-    //dream:
-    //parse!(input -> _, [seeds: usize],* # (_; [maps, $0, $0];*)#*);
-
-    let maps = maps.map(|m| {
-        m.map(|line| {
-            parse!(line -> destination: usize, source: usize, length: usize);
-            (destination, source, length)
-        })
-        .collect()
-    });
+    parse!(input -> _, [seeds: usize],* # (_; [maps: usize, $maps: usize, $maps: usize];*)#*);
     (seeds, maps)
 }
 
+#[cfg_attr(test, test)]
 fn main() {
     let input = include_str!("input.txt");
 

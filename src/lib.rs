@@ -35,6 +35,7 @@
 //!
 //! - `<var>` - capture as string slice and assign it to `<var>`
 //! - `<var>: <type>` - capture and convert to type
+//! - `$<var>` - reference match, combining captures into a tuple `(<var>, $<var>)`
 //! - `_` - blank (skip)
 //! - `(<pattern>)<sep>*` - repetition where `<sep>` can be any valid separator
 //! - `[<pattern>]<sep>*` - repetition collected into a `Vec`
@@ -93,7 +94,7 @@
 //! Multiple variables in repetitions create multiple separate iterators.
 //!
 //! ## Programmable separators
-//! Some separators can be modified. `{<separator> = <pattern>}` sets the sperator to `<pattern>`
+//! Some separators can be modified. `{<separator> = <pattern>}` sets the separator to `<pattern>`
 //! where `<pattern>` can be anything that implements the standard library `Pattern` trait,
 //! e.g. a string or char.
 //!
@@ -118,10 +119,10 @@
 //! # assert_eq!(tld, ".de");
 //! ```
 //!
-//! Only the space (`,`) and period (`.`) seperator are programmable.
+//! Only the space (`,`) and period (`.`) separator are programmable.
 //!
 //! ## Condensing
-//! By default every separator splits exactly once. Using `<separator>~` changes thar behavior to
+//! By default every separator splits exactly once. Using `<separator>~` changes that behavior to
 //! return the first remainder that is not empty.
 //!
 //! For example `,~` splits the input at consecutive spaces.
@@ -132,6 +133,36 @@
 //!
 //! assert_eq!(x, "long");
 //! assert_eq!(y, "pause");
+//! ```
+//!
+//! ## Reference Matches
+//! Prefixing a variable name with `$` (e.g. `$<var>`) creates a reference match.
+//! Reference matches capture additional values for a previously introduced variable `<var>`
+//! and combine all captures for that variable into a tuple `(<var>, $<var>)`. They preserve
+//! the original capture order in the resulting tuple.
+//!
+//! ```
+//! # use simpar::parse;
+//! parse!("hello world!" -> a, $a);
+//!
+//! assert_eq!(a, ("hello", "world!"));
+//! ```
+//!
+//! When combined with repetitions or vector collection, reference matches aggregate values 
+//! alongside the initial capture:
+//!
+//! ```
+//! # use simpar::parse;
+//! parse!("1-10 14-16 101-102" -> [ranges: usize "-" $ranges: usize],*);
+//!
+//! assert_eq!(ranges, vec![(1, 10), (14, 16), (101, 102)]);
+//! ```
+//! References can also use a zero-based capture index:
+//!
+//! ```
+//! # use simpar::parse;
+//! parse!("zero one two three" -> a, b, c, $2);
+//! assert_eq!(c, ("two", "three"));
 //! ```
 
 pub use simpar_macros::parse;

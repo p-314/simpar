@@ -1,16 +1,12 @@
 use simpar::parse;
 
 fn parse(input: &str) -> (&str, impl Iterator<Item = (&str, (&str, &str))>) {
-    //dream:
-    //parse!(input -> directions # (map " = (" $0 ", " $0 ")");*);
-    parse!(input -> directions # (lines);*);
-    let map = lines.map(|line| {
-        parse!(line -> pos " = (" left ", " right ")");
-        (pos, (left, right))
-    });
+    parse!(input -> directions # (map " = (" $map ", " $map ")");*);
+    let map = map.map(|(pos, left, right)| (pos, (left, right)));
     (directions, map)
 }
 
+#[cfg_attr(test, test)]
 fn main() {
     let input = include_str!("input.txt");
 

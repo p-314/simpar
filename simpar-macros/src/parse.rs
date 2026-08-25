@@ -3,7 +3,8 @@ use std::slice::{Iter, IterMut};
 use proc_macro2::{TokenStream, TokenTree};
 use quote::{ToTokens, quote};
 use syn::{
-    Expr, Ident, LitChar, LitStr, Token, Type, braced, bracketed, parenthesized, parse_macro_input,
+    Expr, Ident, LitChar, LitInt, LitStr, Token, Type, braced, bracketed, parenthesized,
+    parse_macro_input,
     token::{Brace, Bracket, Paren},
 };
 
@@ -44,6 +45,23 @@ impl ToTokens for Variable {
         } = self;
         tokens.extend(quote! {let #mu #id;});
     }
+}
+
+struct Reference;
+
+impl Reference {
+    fn from_id(id: usize) -> Ident {
+        Ident::new(
+            &format!("__simpar_macro_internal_temp_{}", id),
+            proc_macro2::Span::call_site(),
+        )
+    }
+}
+
+#[derive(Clone)]
+enum ReferenceIdentifier {
+    Id(Ident),
+    Num(usize),
 }
 
 /// Type for the changeable value of programmable separators.
@@ -155,35 +173,41 @@ impl Separator {
 enum Match {
     Blank,
     Var(Variable),
+    // reference (ref, referenced)
+    Ref(Variable, Ident),
+    RefTemp(Option<(Type, bool)>, ReferenceIdentifier),
     // repetition (inner, separator, collect, root)
     Rep(Format, Separator, bool, bool),
 }
 
 mod mat {
-    use crate::parse::{Format, Match};
-    use crate::parse::{MatchSeparator, Variable};
+    use proc_macro2::Span;
 
-    /// Return the `Var`s in `v`.
-    fn vars(v: &Format) -> Vec<Variable> {
-        let mut var = Vec::new();
-        for ms in &v.0 {
-            var.extend(match ms {
-                MatchSeparator::Open(m) | MatchSeparator::Closed(m, _) => m.vars(),
-                MatchSeparator::Chg(_) => vec![],
-            })
-        }
-        var
-    }
+    use crate::parse::Match;
+    use crate::parse::Variable;
 
     impl Match {
-        /// Return the variables in this `Match` as a vector.
+        /// Return the output variables in this `Match` as a vector.
         pub(crate) fn vars(&self) -> Vec<Variable> {
             match self {
                 Match::Blank => vec![],
                 Match::Var(var) => vec![var.clone()],
-                Match::Rep(match_separators, _, _, __simpar_macro_internal_) => {
-                    vars(match_separators)
-                }
+                Match::Rep(match_separators, _, _, _) => match_separators.vars(),
+                Match::Ref(_, _) => vec![],
+                Match::RefTemp(_, _) => vec![],
+            }
+        }
+
+        pub(crate) fn var_to_ref(&mut self) {
+            if let Match::Var(variable) = self {
+                let ident = variable.ident.clone();
+                let new_ident = syn::Ident::new(
+                    &format!("__simpar_macro_internal_{}_ref", ident),
+                    Span::call_site(),
+                );
+                let mut reference = variable.clone();
+                reference.ident = new_ident;
+                *self = Match::Ref(reference, ident);
             }
         }
     }
@@ -194,7 +218,7 @@ impl ToTokens for Match {
         match self {
             Match::Blank => {}
             Match::Var(variable) => {
-                let var = variable.ident.clone();
+                let var = &variable.ident;
                 tokens.extend(match &variable.conversion_type {
                     Some((ty, true)) => quote! {
                         #var = #RETURN_DATA.parse::<#ty>().expect("Parsing failed!");
@@ -209,7 +233,7 @@ impl ToTokens for Match {
             }
             Match::Rep(match_separators, separator, collect, root) => {
                 if *root {
-                    let singles = Format::singles(match_separators);
+                    let singles = match_separators.singles();
                     let reps = singles
                         .into_iter()
                         .map(|format| Match::Rep(format, separator.clone(), *collect, false));
@@ -217,7 +241,7 @@ impl ToTokens for Match {
                         #(#reps)*
                     });
                 } else {
-                    let var = self.vars().first().cloned().map(|v| v.ident);
+                    let var = match_separators.rep_return_ident();
                     let decl = var.as_ref().map(|id| quote! {let #id;});
                     let assign = var.as_ref().map_or(quote! {let _}, |id| quote! {#id});
 
@@ -259,6 +283,21 @@ impl ToTokens for Match {
                     });
                 }
             }
+            Match::Ref(reference, _) => {
+                let var = &reference.ident;
+                tokens.extend(match &reference.conversion_type {
+                    Some((ty, true)) => quote! {
+                        #var = #RETURN_DATA.parse::<#ty>().expect("Parsing failed!");
+                    },
+                    Some((ty, false)) => quote! {
+                        #var = #RETURN_DATA.parse::<#ty>();
+                    },
+                    None => quote! {
+                        #var = #RETURN_DATA;
+                    },
+                });
+            }
+            Match::RefTemp(_, _) => unreachable!("Error: reached `to_tokens` for `RefTemp`!"),
         }
     }
 }
@@ -269,6 +308,12 @@ enum MatchSeparator {
     Closed(Match, Separator),
     // separator change
     Chg(SeparatorPattern),
+    // reference combinator (inputs, output, root)
+    Cmb(Vec<Ident>, Ident, Ident),
+    // reference combinator that returns an output variable
+    CmbRoot(Vec<Ident>, Variable),
+    // does nothing, similar to `Match::Blank` for `MatchSeparator`
+    Dummy,
 }
 
 impl ToTokens for MatchSeparator {
@@ -355,6 +400,20 @@ impl ToTokens for MatchSeparator {
                 }
             }
             MatchSeparator::Chg(_) => return,
+            MatchSeparator::Cmb(idents, var, _) => quote! {
+                #var = (#(#idents),*);
+            },
+            MatchSeparator::CmbRoot(
+                idents,
+                Variable {
+                    mutability: _,
+                    ident,
+                    conversion_type: _,
+                },
+            ) => quote! {
+                #ident = (#(#idents),*);
+            },
+            MatchSeparator::Dummy => return,
         };
         tokens.extend(ext);
     }
@@ -391,15 +450,12 @@ impl<'a> IntoIterator for &'a mut Format {
 
 mod format {
     use crate::parse::*;
+    use std::collections::HashSet;
 
     impl Format {
+        // Set the `root` attribute of all repetitions to `false`.
         fn validate_not_root(&mut self) {
-            for ms in self {
-                let m = match ms {
-                    MatchSeparator::Open(m) => m,
-                    MatchSeparator::Closed(m, _) => m,
-                    MatchSeparator::Chg(_) => continue,
-                };
+            for m in self.matches_mut() {
                 match m {
                     Match::Blank => {}
                     Match::Var(_) => {}
@@ -407,17 +463,14 @@ mod format {
                         *root = false;
                         Self::validate_not_root(match_separators);
                     }
+                    Match::Ref(_, _) => {}
+                    Match::RefTemp(_, _) => {}
                 }
             }
         }
 
         pub(crate) fn validate_root(&mut self) {
-            for ms in self {
-                let m = match ms {
-                    MatchSeparator::Open(m) => m,
-                    MatchSeparator::Closed(m, _) => m,
-                    MatchSeparator::Chg(_) => continue,
-                };
+            for m in self.matches_mut() {
                 match m {
                     Match::Blank => {}
                     Match::Var(_) => {}
@@ -425,18 +478,134 @@ mod format {
                         *root = true;
                         Self::validate_not_root(match_separators);
                     }
+                    Match::Ref(_, _) => {}
+                    Match::RefTemp(_, _) => {}
                 }
             }
         }
 
+        pub(crate) fn matches(&self) -> impl Iterator<Item = &Match> {
+            self.0.iter().filter_map(|ms| match ms {
+                MatchSeparator::Open(m) | MatchSeparator::Closed(m, _) => Some(m),
+                _ => None,
+            })
+        }
+
+        pub(crate) fn matches_mut(&mut self) -> impl Iterator<Item = &mut Match> {
+            self.0.iter_mut().filter_map(|ms| match ms {
+                MatchSeparator::Open(m) | MatchSeparator::Closed(m, _) => Some(m),
+                _ => None,
+            })
+        }
+
+        // Return all output variables.
         pub(crate) fn vars(&self) -> Vec<Variable> {
             self.0
                 .iter()
                 .flat_map(|ms| match ms {
                     MatchSeparator::Open(m) | MatchSeparator::Closed(m, _) => m.vars(),
                     MatchSeparator::Chg(_) => vec![],
+                    MatchSeparator::Cmb(_, _, _) => vec![],
+                    MatchSeparator::CmbRoot(_, variable) => vec![variable.clone()],
+                    MatchSeparator::Dummy => vec![],
                 })
                 .collect()
+        }
+
+        fn referenced_vars(&self) -> Vec<Variable> {
+            let vars = self.vars();
+            let referenced: HashSet<&Ident> = HashSet::from_iter(self.referenced());
+
+            vars.into_iter()
+                .filter(|v| referenced.contains(&v.ident))
+                .collect()
+        }
+
+        // Return the return variable inside a repetition or `None` if nothing should be returned.
+        pub(crate) fn rep_return_ident(&self) -> Option<&Ident> {
+            // check for combinators first
+            for ms in self {
+                match ms {
+                    MatchSeparator::Cmb(_, ident, _) => return Some(ident),
+                    MatchSeparator::CmbRoot(_, var) => return Some(&var.ident),
+                    _ => {}
+                }
+            }
+
+            // look for `Var`/`Ref` or inside of repetitions
+            for m in self.matches() {
+                match m {
+                    Match::Blank => {}
+                    Match::Var(variable) => return Some(&variable.ident),
+                    Match::Ref(reference, _) => return Some(&reference.ident),
+                    Match::Rep(format, _, _, _) => {
+                        if let return_ident @ Some(_) = format.rep_return_ident() {
+                            return return_ident;
+                        }
+                    }
+                    Match::RefTemp(_, _) => {}
+                };
+            }
+            None
+        }
+
+        // Returns all root identifiers in a repetition.
+        fn roots(&self) -> Vec<&Ident> {
+            let mut roots = HashSet::new();
+
+            for ms in self {
+                let m = match ms {
+                    MatchSeparator::Dummy => continue,
+                    MatchSeparator::Open(m) => m,
+                    MatchSeparator::Closed(m, _) => m,
+                    MatchSeparator::Cmb(_, _, root) => {
+                        roots.insert(root);
+                        continue;
+                    }
+                    MatchSeparator::CmbRoot(_, var) => {
+                        roots.insert(&var.ident);
+                        continue;
+                    }
+                    MatchSeparator::Chg(_) => continue,
+                };
+
+                match m {
+                    Match::Blank => {}
+                    Match::Var(variable) => {
+                        roots.insert(&variable.ident);
+                    }
+                    Match::Ref(_, root) => {
+                        roots.insert(root);
+                    }
+                    Match::Rep(format, _, _, _) => {
+                        roots.extend(format.roots());
+                    }
+                    Match::RefTemp(_, _) => {}
+                }
+            }
+
+            roots.into_iter().collect()
+        }
+
+        // Returns all referenced identifiers in a repetition.
+        fn referenced(&self) -> Vec<&Ident> {
+            let mut roots = HashSet::new();
+
+            for m in self.matches() {
+                match m {
+                    Match::Blank => {}
+                    Match::Var(_) => {}
+                    Match::Ref(_, ident) => {
+                        roots.insert(ident);
+                    }
+                    Match::Rep(format, _, _, _) => {
+                        roots.extend(format.referenced());
+                    }
+                    Match::RefTemp(_, _) => {}
+                }
+            }
+
+            roots.into_iter().collect()
         }
 
         pub(crate) fn last_sep_period(&self) -> SeparatorPattern {
@@ -469,80 +638,273 @@ mod format {
                 .clone()
         }
 
-        /// Extracts all `Match::Var` from `format` and returns them together with relative indices
-        /// in **reverse** order.
-        fn extract_var(&mut self) -> (Vec<Match>, Vec<Vec<usize>>) {
-            let mut vars = Vec::new();
-            let mut indices = Vec::new();
-            for (i, ms) in self.0.iter_mut().enumerate() {
-                let mat = match ms {
+        fn clean_ident(&mut self, var: &Ident) {
+            for ms in self {
+                let m = match ms {
                     MatchSeparator::Open(m) => m,
                     MatchSeparator::Closed(m, _) => m,
-                    _ => continue,
+                    MatchSeparator::Chg(_) => continue,
+                    MatchSeparator::Cmb(_, _, root) => {
+                        if root != var {
+                            *ms = MatchSeparator::Dummy;
+                        }
+                        continue;
+                    }
+                    MatchSeparator::CmbRoot(_, variable) => {
+                        if &variable.ident != var {
+                            *ms = MatchSeparator::Dummy;
+                        }
+                        continue;
+                    }
+                    MatchSeparator::Dummy => continue,
                 };
-                match mat {
+                match m {
                     Match::Blank => {}
-                    Match::Var(_) => {
-                        vars.push(std::mem::replace(mat, Match::Blank));
-                        indices.push(vec![i]);
+                    Match::Var(variable) => {
+                        if &variable.ident != var {
+                            *m = Match::Blank;
+                        }
                     }
-                    Match::Rep(match_separators, _, _, _) => {
-                        let (u, j) = Format::extract_var(match_separators);
-                        vars.extend(u);
-                        indices.extend(j.into_iter().map(|mut k| {
-                            k.push(i);
-                            k
-                        }));
+                    Match::Ref(_, ident) => {
+                        if ident != var {
+                            *m = Match::Blank;
+                        }
                     }
+                    Match::Rep(format, _, _, _) => format.clean_ident(var),
+                    Match::RefTemp(_, _) => {}
                 }
             }
-            (vars, indices)
         }
 
-        /// Returns copies of `format` for each `Match::Var` such that each copy has exactly one `Match::Var`
+        /// Returns copies of `format` for each `Variable` such that each copy has exactly one `Variable`
         /// or one exact copy if `format` has none.
         pub(crate) fn singles(&self) -> Vec<Format> {
-            let mut blank = self.clone();
-            let (vars, indices) = Self::extract_var(&mut blank);
+            let vars = self.roots();
 
-            // if `format` has zero variables return `blank` (equal to `format`)
+            // if `format` has zero variables return a copy of `self`
             if vars.is_empty() {
-                return vec![blank];
+                return vec![self.clone()];
             }
 
             let mut singles = Vec::new();
-            'singles: for (v, mut ind) in vars.into_iter().zip(indices) {
-                let mut copy = blank.clone();
+            for root in vars {
+                let mut copy = self.clone();
 
-                let mut vec_node = &mut copy;
-                while let Some(i) = ind.pop() {
-                    let node = &mut vec_node.0[i];
-                    let node_match = match node {
-                        MatchSeparator::Open(m) => m,
-                        MatchSeparator::Closed(m, _) => m,
-                        MatchSeparator::Chg(_) => unreachable!(),
-                    };
-                    match node_match {
-                        Match::Rep(match_separators, _, _, _) => vec_node = match_separators,
-                        _ => {
-                            *node_match = v;
-                            singles.push(copy);
-                            continue 'singles;
+                copy.clean_ident(root);
+                singles.push(copy);
+            }
+            singles
+        }
+
+        /// Returns a path to the (unique) combinator root or `None` if there are no references.
+        /// Paths are vectors of indces, where the last element corresponds to the direct child
+        /// of `self`.
+        fn get_root(&self, var: &Ident) -> Option<Vec<usize>> {
+            let mut references = 0;
+            let mut root = None;
+
+            for (i, ms) in self.into_iter().enumerate() {
+                let m = match ms {
+                    MatchSeparator::Open(m) | MatchSeparator::Closed(m, _) => m,
+                    _ => continue,
+                };
+                match m {
+                    Match::Blank => {}
+                    Match::Var(variable) if &variable.ident == var => {
+                        references += 1;
+                        root = Some(vec![]);
+                    }
+                    Match::Ref(_, ident) if ident == var => {
+                        references += 1;
+                        root = Some(vec![]);
+                    }
+                    Match::Rep(format, _, _, _) => {
+                        if let Some(mut tail) = format.get_root(var) {
+                            references += 1;
+                            tail.push(i);
+                            root = Some(tail);
                         }
-                    };
+                    }
+                    _ => {}
                 }
-                unreachable!()
             }
 
-            singles
+            if references > 1 {
+                // self is root
+                Some(vec![])
+            } else if references == 1 {
+                // either exactly one child that is a reference or
+                // exactly one child that leads to root
+                root
+            } else {
+                // no reference in self
+                None
+            }
+        }
+
+        /// Inserts all combinators for `var`.
+        /// Assumes that `self` is the root for combining `var` and inserts
+        /// `MatchSeparator::CmbRoot` into `self` and `MatchSeparator::Cmb` into children.
+        fn insert_cmb_root(&mut self, var: Variable, cmb_i: &mut usize) {
+            let var_ident = &var.ident;
+            let mut inputs = vec![];
+
+            for m in self.matches_mut() {
+                match m {
+                    Match::Var(variable) if &variable.ident == var_ident => {
+                        // change to Ref
+                        m.var_to_ref();
+                        // add new ident to inputs
+                        match m {
+                            Match::Ref(variable, _) => inputs.push(variable.ident.clone()),
+                            _ => unreachable!(),
+                        }
+                    }
+                    Match::Ref(variable, ident) if ident == var_ident => {
+                        inputs.push(variable.ident.clone());
+                    }
+                    Match::Rep(format, _, _, _) => {
+                        if let Some(rep_output) = format.insert_cmb_not_root(var_ident, cmb_i) {
+                            inputs.push(rep_output);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            // sanity check: there should be at least two inputs
+            if inputs.len() < 2 {
+                panic!("unexpected combinator");
+            }
+
+            self.push(MatchSeparator::CmbRoot(inputs, var));
+        }
+
+        /// Inserts all combinators for `var` and return the last output or `None` if there is
+        /// no reference.
+        /// Assumes that `self` is not the root for combining `var` and only inserts
+        /// `MatchSeparator::Cmb`.
+        fn insert_cmb_not_root(&mut self, var: &Ident, cmb_i: &mut usize) -> Option<Ident> {
+            // combinator inputs
+            let mut inputs: Vec<Ident> = vec![];
+
+            for m in self.matches_mut() {
+                match m {
+                    Match::Var(variable) if &variable.ident == var => {
+                        // change to Ref
+                        m.var_to_ref();
+                        // add new ident to inputs
+                        match m {
+                            Match::Ref(variable, _) => inputs.push(variable.ident.clone()),
+                            _ => unreachable!(),
+                        }
+                    }
+                    Match::Ref(variable, ident) if ident == var => {
+                        inputs.push(variable.ident.clone());
+                    }
+                    Match::Rep(format, _, _, _) => {
+                        if let Some(rep_output) = format.insert_cmb_not_root(var, cmb_i) {
+                            inputs.push(rep_output);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            if inputs.len() > 1 {
+                // need combinator
+                let output = Ident::new(
+                    &format!("__simpar_macro_internal_cmb_{}", cmb_i),
+                    proc_macro2::Span::call_site(),
+                );
+                *cmb_i += 1;
+                self.push(MatchSeparator::Cmb(inputs, output.clone(), var.clone()));
+                Some(output)
+            } else if inputs.len() == 1 {
+                inputs.pop()
+            } else {
+                None
+            }
+        }
+
+        pub(crate) fn insert_cmb(&mut self) {
+            let mut cmb_i = 0;
+            for var in self.referenced_vars() {
+                let var_ident = &var.ident;
+
+                if let Some(mut path) = self.get_root(var_ident) {
+                    // -> combinator needed
+
+                    // move to root
+                    let mut head = &mut *self;
+                    while let Some(i) = path.pop() {
+                        let child = &mut head.0[i];
+                        let m = match child {
+                            MatchSeparator::Open(m) | MatchSeparator::Closed(m, _) => m,
+                            _ => panic!("unsound index: expected match"),
+                        };
+                        head = match m {
+                            Match::Rep(format, _, _, _) => format,
+                            _ => panic!("unsound index: expected repetition"),
+                        }
+                    }
+
+                    head.insert_cmb_root(var, &mut cmb_i);
+                }
+            }
+        }
+
+        pub(crate) fn validate_refs(&mut self, vars: &[Variable], reference_id: &mut usize) {
+            for m in self.matches_mut() {
+                match m {
+                    Match::Blank => {}
+                    Match::Var(_) => {}
+                    Match::Ref(_, _) => {}
+                    Match::RefTemp(ty, reference_identifier) => {
+                        let ty = ty.clone();
+                        let ident = match reference_identifier {
+                            ReferenceIdentifier::Id(ident) => ident.clone(),
+                            ReferenceIdentifier::Num(i) => {
+                                vars.get(*i).expect("Index out of bounds!").ident.clone()
+                            }
+                        };
+                        let _ = std::mem::replace(
+                            m,
+                            Match::Ref(
+                                Variable {
+                                    mutability: None,
+                                    ident: Reference::from_id(*reference_id),
+                                    conversion_type: ty,
+                                },
+                                ident,
+                            ),
+                        );
+                        *reference_id += 1;
+                    }
+                    Match::Rep(format, _, _, _) => {
+                        format.validate_refs(vars, reference_id);
+                    }
+                }
+            }
         }
     }
 }
 
 impl ToTokens for Format {
     fn to_tokens(&self, tokens: &mut TokenStream) {
+        // temporary variables
+        let decl = self
+            .into_iter()
+            .flat_map(|ms| match ms {
+                MatchSeparator::Cmb(idents, _, _) => idents.iter(),
+                MatchSeparator::CmbRoot(idents, _) => idents.iter(),
+                _ => [].iter(),
+            })
+            .map(|idents| quote! {let #idents;});
+
         let inner = &self.0;
         tokens.extend(quote! {
+            #(#decl)*
             #(#inner)*
         });
     }
@@ -631,6 +993,34 @@ impl syn::parse::Parse for Format {
             } else if input.peek(Brace) {
                 SplitPattern::parse_sep_chg(input, &mut format)?;
                 continue;
+            } else if input.peek(Token![$]) {
+                input.parse::<Token![$]>()?;
+
+                let ref_id = if input.peek(LitInt) {
+                    let num = input.parse::<LitInt>()?.base10_parse::<usize>()?;
+                    ReferenceIdentifier::Num(num)
+                } else if input.peek(Ident) {
+                    let var = input.parse::<Ident>()?;
+                    ReferenceIdentifier::Id(var)
+                } else {
+                    return Err(input.error("expected identifier or integer literal"));
+                };
+
+                let ty = input
+                    .peek(Token![:])
+                    .then(|| {
+                        input.parse::<Token![:]>().unwrap();
+                        let ty = input.parse::<Type>()?;
+                        if input.peek(Token![?]) {
+                            input.parse::<Token![?]>().unwrap();
+                            Ok((ty, false))
+                        } else {
+                            Ok((ty, true))
+                        }
+                    })
+                    .map_or(Ok(None), |y: syn::Result<(Type, bool)>| y.map(Some))?;
+
+                mat = Match::RefTemp(ty, ref_id);
             } else {
                 // allow for consecutive separators by treating this as a `Blank`
                 mat = Match::Blank;
@@ -701,6 +1091,11 @@ impl Parser {
     fn check(mut self) -> CheckedParser {
         self.format.validate_root();
 
+        let vars_ordered = self.format.vars();
+        self.format.validate_refs(&vars_ordered, &mut 0);
+
+        self.format.insert_cmb();
+
         CheckedParser(self)
     }
 }
@@ -736,8 +1131,6 @@ pub fn parse_impl(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
         format,
     }) = parser;
 
-    let format = format.0;
-
     quote! {
         #(
             #outputs
@@ -747,9 +1140,7 @@ pub fn parse_impl(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
             // local variables
             let mut #INPUT = #data;
 
-            #(
-                #format
-            )*
+            #format
         }
     }
     .into()
