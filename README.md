@@ -96,7 +96,7 @@ assert_eq!(n, vec![1, 2, 3, 4]);
 Multiple variables in repetitions create multiple separate iterators.
 
 ## Programmable separators
-Some separators can be modified. `{<separator> = <pattern>}` sets the sperator to `<pattern>`
+Some separators can be modified. `{<separator> = <pattern>}` sets the separator to `<pattern>`
 where `<pattern>` can be anything that implements the standard library `Pattern` trait,
 e.g. a string or char.
 
@@ -113,10 +113,10 @@ then parsing can be done with:
 parse!(file -> _; {, = ','} country, capital, population: u64, tld);
 ```
 
-Only the space (`,`) and period (`.`) seperator are programmable.
+Only the space (`,`) and period (`.`) separator are programmable.
 
 ## Condensing
-By default every separator splits exactly once. Using `<separator>~` changes thar behavior to
+By default every separator splits exactly once. Using `<separator>~` changes that behavior to
 return the first remainder that is not empty.
 
 For example `,~` splits the input at consecutive spaces.
@@ -131,7 +131,8 @@ assert_eq!(y, "pause");
 ## Reference Matches
 Prefixing a variable name with `$` (e.g. `$<var>`) creates a reference match.
 Reference matches capture additional values for a previously introduced variable `<var>`
-and combine all captures for that variable into a tuple `(<var>, $<var>)`.
+and combine all captures for that variable into a tuple `(<var>, $<var>)`. They preserve
+the original capture order in the resulting tuple.
 
 ```rust
 parse!("hello world!" -> a, $a);
@@ -146,6 +147,12 @@ alongside the initial capture:
 parse!("1-10 14-16 101-102" -> [ranges: usize "-" $ranges: usize],*);
 
 assert_eq!(ranges, vec![(1, 10), (14, 16), (101, 102)]);
+```
+References can also use a zero-based capture index:
+
+```rust
+parse!("zero one two three" -> a, b, c, $2);
+assert_eq!(c, ("two", "three"));
 ```
 
 # License
